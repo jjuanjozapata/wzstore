@@ -207,26 +207,20 @@ function saveProducts(products) {
 function renderInventoryTable() {
   const products = loadProducts();
   const tbody = document.getElementById("inventory-table-body");
-
   if (products.length === 0) {
     tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500">El catálogo está vacío.</td></tr>`;
     return;
   }
-
   tbody.innerHTML = products
     .map((p) => {
-      // Calculamos stock total virtual sumando variantes
       let totalStock = 0;
-      p.variants.forEach((v) => {
-        v.sizes.forEach((s) => (totalStock += Number(s.stock)));
+      p.variants?.forEach((v) => {
+        v.sizes?.forEach((s) => (totalStock += Number(s.stock) || 0));
       });
-
-      // Si el estado "isAvailable" es falso, anulamos visualmente el stock
-      const isAvailable = p.isAvailable !== false;
+      const isAvailable = p.status !== "agotado" && p.isAvailable !== false && totalStock > 0;
       const statusText = isAvailable
-        ? `<span class="text-green-400">${totalStock} unds</span>`
+        ? `<span class="text-green-400 font-semibold">${totalStock} unds</span>`
         : `<span class="text-red-500 font-bold">AGOTADO (Apagado)</span>`;
-
       return `
             <tr class="hover:bg-dark transition-colors group">
                 <td class="p-4 flex items-center gap-3">
@@ -282,39 +276,143 @@ window.confirmDelete = function (id) {
 };
 
 // Alternar disponibilidad (Simular Agotado visualmente sin borrar stock real)
-// Alternar disponibilidad (Máquina de estados: respalda y restaura inventario real)
+let restockTargetId = null;
+let restockModalInitialized = false;
+
+function initRestockModal() {
+  if (restockModalInitialized) return;
+  const modal = document.getElementById("wz-restock-modal");
+  const closeBtn = document.getElementById("wz-modal-close-btn");
+  const cancelBtn = document.getElementById("wz-modal-cancel-btn");
+  const confirmBtn = document.getElementById("wz-modal-confirm-btn");
+  const qtyInput = document.getElementById("wz-restock-qty");
+  const errorMsg = document.getElementById("wz-modal-error-msg");
+
+  if (!modal) return;
+
+  const closeModal = () => {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+    restockTargetId = null;
+    renderInventoryTable();
+  };
+
+  closeBtn?.addEventListener("click", closeModal);
+  cancelBtn?.addEventListener("click", closeModal);
+
+  confirmBtn?.addEventListener("click", () => {
+    const qty = parseInt(qtyInput.value, 10);
+    if (isNaN(qty) || qty < 1) {
+      if (errorMsg) errorMsg.classList.remove("hidden");
+      qtyInput.focus();
+      return;
+    }
+    if (errorMsg) errorMsg.classList.add("hidden");
+
+    const mode = document.querySelector('input[name="wz-stock-mode"]:checked')?.value || "uniform";
+    let products = loadProducts();
+    const target = products.find(p => p.id === restockTargetId);
+
+    if (target && target.variants) {
+      let allSizes = [];
+      target.variants.forEach(v => {
+        if (Array.isArray(v.sizes)) {
+          v.sizes.forEach(s => allSizes.push(s));
+        }
+      });
+
+      if (allSizes.length > 0) {
+        if (mode === "uniform") {
+          allSizes.forEach(s => (s.stock = qty));
+        } else {
+          const base = Math.floor(qty / allSizes.length);
+          const remainder = qty % allSizes.length;
+          allSizes.forEach((s, i) => {
+            s.stock = base + (i < remainder ? 1 : 0);
+          });
+        }
+      }
+
+      target.status = "disponible";
+      target.isAvailable = true;
+      saveProducts(products);
+    }
+
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+    restockTargetId = null;
+    renderInventoryTable();
+  });
+
+  restockModalInitialized = true;
+}
+
+function openRestockModal(target) {
+  initRestockModal();
+  const modal = document.getElementById("wz-restock-modal");
+  if (!modal) {
+    const qtyStr = prompt(`Reactivar inventario para "${target.name}".\nIngresa la cantidad de prendas disponibles:`, "10");
+    const qty = parseInt(qtyStr, 10);
+    if (!isNaN(qty) && qty > 0) {
+      target.variants?.forEach(v => v.sizes?.forEach(s => (s.stock = qty)));
+      target.status = "disponible";
+      target.isAvailable = true;
+      let products = loadProducts();
+      const idx = products.findIndex(p => p.id === target.id);
+      if (idx > -1) products[idx] = target;
+      saveProducts(products);
+    }
+    renderInventoryTable();
+    return;
+  }
+
+  restockTargetId = target.id;
+  const nameEl = document.getElementById("wz-modal-prod-name");
+  const infoEl = document.getElementById("wz-modal-variants-info");
+  const qtyInput = document.getElementById("wz-restock-qty");
+  const errorMsg = document.getElementById("wz-modal-error-msg");
+
+  if (nameEl) nameEl.textContent = target.name;
+  if (infoEl) {
+    let sizeCount = 0;
+    target.variants?.forEach(v => (sizeCount += v.sizes?.length || 0));
+    infoEl.textContent = `${target.variants?.length || 0} color(es) | ${sizeCount} variante(s) de talla`;
+  }
+  if (qtyInput) qtyInput.value = "";
+  if (errorMsg) errorMsg.classList.add("hidden");
+
+  modal.classList.remove("hidden");
+  modal.classList.add("flex");
+  qtyInput?.focus();
+}
+
 window.toggleProductStatus = function(id) {
   let products = loadProducts();
   const index = products.findIndex(p => p.id === id);
-  
-  if (index > -1) {
-    const target = products[index];
-    const isCurrentlyAgotado = target.status === "agotado";
-    const newStatus = isCurrentlyAgotado ? "disponible" : "agotado";
-    target.status = newStatus;
-    
-    if (newStatus === "agotado") {
-      // Guarda respaldo del stock actual y pasa a 0
-      target.variants?.forEach(variant => {
-        variant.sizes?.forEach(sizeObj => {
-          const current = Number(sizeObj.stock) || 0;
-          sizeObj.previousStock = current > 0 ? current : (Number(sizeObj.previousStock) || 1);
-          sizeObj.stock = 0;
-        });
-      });
-    } else {
-      // Restaura el stock original guardado en el respaldo
-      target.variants?.forEach(variant => {
-        variant.sizes?.forEach(sizeObj => {
-          const restored = Number(sizeObj.previousStock);
-          sizeObj.stock = (!isNaN(restored) && restored > 0) ? restored : 1;
-          delete sizeObj.previousStock;
-        });
-      });
-    }
+  if (index === -1) return;
 
+  const target = products[index];
+  let totalStock = 0;
+  target.variants?.forEach(v => {
+    v.sizes?.forEach(s => (totalStock += Number(s.stock) || 0));
+  });
+
+  const isCurrentlyActive = target.status !== "agotado" && target.isAvailable !== false && totalStock > 0;
+
+  if (isCurrentlyActive) {
+    // Pasar a Agotado inmediato: stock a 0 sin confirmación
+    target.status = "agotado";
+    target.isAvailable = false;
+    target.variants?.forEach(variant => {
+      variant.sizes?.forEach(sizeObj => {
+        sizeObj.stock = 0;
+      });
+    });
     saveProducts(products);
     renderInventoryTable();
+  } else {
+    // Reactivar: desplegar modal para definir stock
+    openRestockModal(target);
   }
 };
 

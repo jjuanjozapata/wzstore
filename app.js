@@ -204,7 +204,6 @@ const renderSkeleton = () => {
 
 const renderCatalog = () => {
   const grid = document.getElementById("catalog-grid");
-
   const filtered = products.filter((p) => {
     const matchText = p.name.toLowerCase().includes(currentFilter.text);
     const matchCat =
@@ -221,12 +220,15 @@ const renderCatalog = () => {
 
   grid.innerHTML = filtered
     .map((p) => {
-      const isAgotado = p.status === "agotado";
+      let totalStock = 0;
+      p.variants?.forEach((v) => {
+        v.sizes?.forEach((s) => (totalStock += Number(s.stock) || 0));
+      });
+      const isAgotado = p.status === "agotado" || p.isAvailable === false || totalStock <= 0;
       const state = uiState[p.id];
-      const currentVariant = p.variants[state?.colorIdx || 0];
+      const currentVariant = p.variants?.[state?.colorIdx || 0] || p.variants?.[0];
       const finalPrice = p.isOffer ? p.priceOffer : p.priceRegular;
-
-      const sizesHtml = currentVariant.sizes
+      const sizesHtml = (currentVariant?.sizes || [])
         .map((s, idx) => {
           const isDisabled = isAgotado || s.stock === 0;
           const isSelected = state?.sizeIdx === idx;
@@ -257,11 +259,9 @@ const renderCatalog = () => {
       `
           : ""
       }
-
       <div class="relative h-64 bg-slate-950 overflow-hidden" onmouseenter="playProductVideo(this, '${p.id}')" onmouseleave="stopProductVideo(this, '${p.id}')">
         <img src="${p.imageUrl || p.media?.images?.[0]}" alt="${p.name}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy">
       </div>
-
       <div class="p-4 flex flex-col flex-grow">
         <h3 class="text-base font-bold text-white truncate">${p.name}</h3>
         <p class="text-xs text-slate-400 line-clamp-2 my-1">${p.description}</p>
@@ -270,7 +270,6 @@ const renderCatalog = () => {
         <div class="my-2">
           <div class="flex gap-2 flex-wrap">${sizesHtml}</div>
         </div>
-
         ${
           !isAgotado
             ? `

@@ -1,4 +1,4 @@
-// Base de datos semilla estandarizada con llaves completas y saneamiento de sintaxis JSON
+// Base de datos inicial corregida con llaves de objeto completas
 const INITIAL_DATABASE = [
   {
     id: "wz-uuid-str-" + (Date.now() + 1),

@@ -17,7 +17,7 @@ const sanitizeInput = (str) => {
 let products = [];
 let cart = [];
 let uiState = {}; // Guarda estado del selector de color/talla por producto
-// Objeto de filtrado global con valor infinito de precio por defecto para evitar bloqueos
+// Filtros iniciales con precio tope infinito para no bloquear productos
 let currentFilter = {
   text: '',
   category: 'all',
@@ -29,16 +29,14 @@ let currentFilter = {
   maxPrice: Infinity
 };
 
-// Motor Algorítmico Multidimensional con conexión al renderizador universal
+// Motor de filtros sincronizado directamente con la vista
 const executeMasterFilters = () => {
   let result = [...products];
 
-  // 1. Filtro por coincidencia de texto
   if (currentFilter.text) {
     result = result.filter((p) => p.name.toLowerCase().includes(currentFilter.text));
   }
 
-  // 2. Filtro por Categoría
   if (currentFilter.category !== 'all') {
     result = result.filter((p) => 
       p.category?.toLowerCase() === currentFilter.category.toLowerCase() || 
@@ -46,7 +44,6 @@ const executeMasterFilters = () => {
     );
   }
 
-  // 3. Filtro por Segmento de Género
   if (currentFilter.gender !== 'ambos') {
     result = result.filter((p) => 
       p.gender?.toLowerCase() === currentFilter.gender.toLowerCase() || 
@@ -54,12 +51,10 @@ const executeMasterFilters = () => {
     );
   }
 
-  // 4. Filtro por Ofertas Activas
   if (currentFilter.onlyOffers) {
     result = result.filter((p) => p.isOffer);
   }
 
-  // 5. Filtro de Precio
   if (currentFilter.maxPrice !== Infinity && !isNaN(currentFilter.maxPrice)) {
     result = result.filter((p) => {
       const price = p.isOffer ? p.priceOffer : p.priceRegular;
@@ -67,7 +62,6 @@ const executeMasterFilters = () => {
     });
   }
 
-  // 6. Algoritmo de Ordenamiento
   switch (currentFilter.sortBy) {
     case 'price-asc':
       result.sort((a, b) => (a.isOffer ? a.priceOffer : a.priceRegular) - (b.isOffer ? b.priceOffer : b.priceRegular));
@@ -87,12 +81,12 @@ const executeMasterFilters = () => {
       break;
   }
 
-  // Despliegue de la lista procesada sin fallos de referencia
   renderCatalog(result);
 };
 
-// Exposición como alias para preservar compatibilidad en cascada
+// Alias de seguridad por compatibilidad
 window.renderFilteredCatalog = (customList) => renderCatalog(customList);
+
 
 // Variables de Envío y Cupones
 let appliedCoupon = null; // 'WZ2026' | 'FREEATHLETE'
@@ -142,7 +136,7 @@ const setupEventListeners = () => {
     });
   }
 
- // Escucha defensiva de rango de precio para evitar TypeErrors si el control no está en el DOM
+// Control seguro del slider de precio (solo si existe en el DOM)
   const priceRangeInput = document.getElementById("price-range");
   if (priceRangeInput) {
     priceRangeInput.addEventListener("input", (e) => {

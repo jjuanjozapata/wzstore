@@ -720,7 +720,7 @@ window.toggleProductStatus = function(id) {
 const modal = document.getElementById("crud-modal");
 const form = document.getElementById("product-form");
 
-// Compresión por Canvas intermedio (Máximo 800x800px, JPEG calidad 0.7)
+// Compresión optimizada en Canvas a formato WebP (Máx 800x800px, 0.72)
 const compressImage = (file) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -734,6 +734,7 @@ const compressImage = (file) => {
         let width = img.width;
         let height = img.height;
 
+        // Mantener proporción matemática del encuadre
         if (width > height) {
           if (width > MAX_DIM) {
             height = Math.round((height * MAX_DIM) / width);
@@ -750,7 +751,13 @@ const compressImage = (file) => {
         canvas.height = height;
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", 0.7));
+
+        // Intentar WebP para menor consumo de bytes; si el browser no lo soporta cae a JPEG
+        let dataUrl = canvas.toDataURL("image/webp", 0.72);
+        if (!dataUrl.startsWith("data:image/webp")) {
+          dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+        }
+        resolve(dataUrl);
       };
       img.onerror = (err) => reject(err);
     };

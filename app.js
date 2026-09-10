@@ -133,6 +133,37 @@ document.addEventListener("DOMContentLoaded", () => {
   setupEventListeners();
 });
 
+// Detector pasivo de carritos abandonados con cupón de incentivo
+const checkAbandonedCartReminder = () => {
+  if (!cart || cart.length === 0) return;
+
+  const LAST_ACTIVITY_KEY = "wz_cart_last_activity";
+  const REMINDER_SENT_KEY = "wz_cart_reminder_sent";
+  const now = Date.now();
+  const lastActive = Number(localStorage.getItem(LAST_ACTIVITY_KEY)) || now;
+  const alreadyNotified = localStorage.getItem(REMINDER_SENT_KEY) === "true";
+
+  // Si pasaron más de 12 horas desde la última interacción y no se ha mostrado
+  const TWELVE_HOURS = 12 * 60 * 60 * 1000;
+  if (!alreadyNotified && now - lastActive > TWELVE_HOURS) {
+    setTimeout(() => {
+      // Pre-aplicar cupón de recuperación
+      appliedCoupon = "WZRECUPERA10";
+      const couponInput = document.getElementById("coupon-input");
+      if (couponInput) couponInput.value = "WZRECUPERA10";
+      
+      updateCartUI();
+      showNotificationModal(
+        "¡Tus prendas te están esperando!",
+        "Notamos que dejaste artículos en tu equipo. Te obsequiamos un 10% de descuento extra con el código WZRECUPERA10 aplicado automáticamente."
+      );
+      localStorage.setItem(REMINDER_SENT_KEY, "true");
+    }, 1500);
+  } else {
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(now));
+  }
+};
+
 const initApp = () => {
   const stored = localStorage.getItem("wz_core_products");
   if (!stored) {
@@ -155,6 +186,7 @@ const initApp = () => {
   renderFeaturedHero();
   setTimeout(() => renderCatalog(), 600); // LCP optimization simulation
   updateCartUI();
+  checkAbandonedCartReminder();
 };
 
 const setupEventListeners = () => {
@@ -493,11 +525,12 @@ const applyCouponLogic = () => {
   const code = sanitizeInput(
     document.getElementById("coupon-input").value.toUpperCase(),
   );
-  if (code === "WZ2026" || code === "FREEATHLETE") {
+  if (code === "WZ2026" || code === "FREEATHLETE" || code === "WZRECUPERA10") {
     appliedCoupon = code;
     updateCartUI();
+    showNotificationModal("Cupón Aplicado", `Se activó el beneficio del cupón: ${code}`);
   } else {
-    alert("Cupón no válido.");
+    showNotificationModal("Cupón Inválido", "El código ingresado no existe o ya venció.");
     appliedCoupon = null;
     updateCartUI();
   }
@@ -542,9 +575,13 @@ const updateCartUI = () => {
 
   badge.textContent = totalItems;
 
-  // Reglas matemáticas
+  // Reglas matemáticas unificadas
   let discount = 0;
-  if (appliedCoupon === "WZ2026") discount = subtotal * 0.15;
+  if (appliedCoupon === "WZ2026") {
+    discount = Math.round(subtotal * 0.15);
+  } else if (appliedCoupon === "WZRECUPERA10") {
+    discount = Math.round(subtotal * 0.10);
+  }
 
   let shippingCost = SHIP_RATES[shippingType];
   if (subtotal > 300000 || appliedCoupon === "FREEATHLETE") shippingCost = 0;

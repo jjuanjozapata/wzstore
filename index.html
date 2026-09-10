@@ -693,5 +693,14 @@
 
     <script src="db.js"></script>
     <script src="app.js"></script>
+    <!-- Registro seguro del Service Worker PWA -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js')
+            .catch((err) => console.warn('SW no registrado:', err));
+        });
+      }
+    </script>
   </body>
 </html>

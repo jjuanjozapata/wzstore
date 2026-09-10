@@ -29,32 +29,84 @@ let currentFilter = {
   maxPrice: Infinity
 };
 
-// Motor de filtros sincronizado directamente con la vista
+// Gestión de cascada para categorías principales y revelación de género
+window.handleParentCategory = (categoryName) => {
+  currentFilter.category = categoryName;
+
+  // Actualizar estilos activos de las píldoras de categoría
+  document.querySelectorAll(".cat-pill").forEach((btn) => {
+    btn.className = "cat-pill bg-slate-800 text-slate-300 hover:text-white px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all";
+  });
+
+  const activeBtn = Array.from(document.querySelectorAll(".cat-pill")).find(
+    (btn) => btn.textContent.trim().toLowerCase() === (categoryName === 'all' ? 'todos' : categoryName.toLowerCase())
+  );
+  if (activeBtn) {
+    activeBtn.className = "cat-pill bg-emerald-500 text-black px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all";
+  }
+
+  // Desplegar u ocultar selector secundario de género según la selección
+  const genderContainer = document.getElementById("gender-discriminator");
+  if (genderContainer) {
+    if (categoryName === "all" || categoryName.toLowerCase() === "accesorios") {
+      genderContainer.classList.add("hidden");
+      currentFilter.gender = "todas";
+    } else {
+      genderContainer.classList.remove("hidden");
+    }
+  }
+
+  // Reiniciar estado visual de los botones de género
+  window.applyGenderFilter("todas", false);
+  executeMasterFilters();
+};
+
+// Aplicación reactiva del filtro de género
+window.applyGenderFilter = (genderValue, shouldExecute = true) => {
+  currentFilter.gender = genderValue.toLowerCase();
+
+  // Refrescar estilos activos de género
+  document.querySelectorAll(".gender-pill").forEach((btn) => {
+    btn.className = "gender-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors";
+  });
+
+  const activeGenderBtn = document.getElementById(`gender-btn-${genderValue.toLowerCase()}`);
+  if (activeGenderBtn) {
+    activeGenderBtn.className = "gender-pill px-3 py-1 rounded-lg text-xs font-bold bg-emerald-500 text-black transition-colors";
+  }
+
+  if (shouldExecute) {
+    executeMasterFilters();
+  }
+};
+
+// Motor centralizado de filtrado que unifica categoría, género, texto y precio
 const executeMasterFilters = () => {
   let result = [...products];
 
+  // Filtro de texto por nombre
   if (currentFilter.text) {
     result = result.filter((p) => p.name.toLowerCase().includes(currentFilter.text));
   }
 
-  if (currentFilter.category !== 'all') {
-    result = result.filter((p) => 
-      p.category?.toLowerCase() === currentFilter.category.toLowerCase() || 
-      p.type?.toLowerCase() === currentFilter.category.toLowerCase()
-    );
+  // Filtro de categoría principal
+  if (currentFilter.category && currentFilter.category !== "all") {
+    result = result.filter((p) => {
+      const catMatch = p.category?.toLowerCase() === currentFilter.category.toLowerCase();
+      const nameMatch = p.name?.toLowerCase().includes(currentFilter.category.toLowerCase());
+      return catMatch || nameMatch;
+    });
   }
 
-  if (currentFilter.gender !== 'ambos') {
-    result = result.filter((p) => 
-      p.gender?.toLowerCase() === currentFilter.gender.toLowerCase() || 
-      p.category?.toLowerCase() === currentFilter.gender.toLowerCase()
-    );
+  // Filtro secundario de género en cascada
+  if (currentFilter.gender && currentFilter.gender !== "todas" && currentFilter.gender !== "ambos") {
+    result = result.filter((p) => {
+      const pGender = (p.gender || p.category || "").toLowerCase();
+      return pGender.includes(currentFilter.gender);
+    });
   }
 
-  if (currentFilter.onlyOffers) {
-    result = result.filter((p) => p.isOffer);
-  }
-
+  // Filtro por precio tope
   if (currentFilter.maxPrice !== Infinity && !isNaN(currentFilter.maxPrice)) {
     result = result.filter((p) => {
       const price = p.isOffer ? p.priceOffer : p.priceRegular;
@@ -62,31 +114,11 @@ const executeMasterFilters = () => {
     });
   }
 
-  switch (currentFilter.sortBy) {
-    case 'price-asc':
-      result.sort((a, b) => (a.isOffer ? a.priceOffer : a.priceRegular) - (b.isOffer ? b.priceOffer : b.priceRegular));
-      break;
-    case 'price-desc':
-      result.sort((a, b) => (b.isOffer ? b.priceOffer : b.priceRegular) - (a.isOffer ? a.priceOffer : a.priceRegular));
-      break;
-    case 'alpha-az':
-      result.sort((a, b) => a.name.localeCompare(b.name));
-      break;
-    case 'discount-desc':
-      result.sort((a, b) => {
-        const discA = a.isOffer ? ((a.priceRegular - a.priceOffer) / a.priceRegular) : 0;
-        const discB = b.isOffer ? ((b.priceRegular - b.priceOffer) / b.priceRegular) : 0;
-        return discB - discA;
-      });
-      break;
-  }
-
   renderCatalog(result);
 };
 
-// Alias de seguridad por compatibilidad
+// Enlace de compatibilidad con renderizado directo
 window.renderFilteredCatalog = (customList) => renderCatalog(customList);
-
 
 // Variables de Envío y Cupones
 let appliedCoupon = null; // 'WZ2026' | 'FREEATHLETE'
@@ -171,9 +203,19 @@ const setupEventListeners = () => {
     });
   }
 
-  // Compartir carrito por URL
-  const shareCartBtn = document.getElementById("share-cart-btn");
-  if (shareCartBtn) shareCartBtn.addEventListener("click", shareCartUrl);
+  // Disociación de listeners para guardar y compartir carrito
+  const saveCartBtn = document.getElementById("btn-save-cart");
+  if (saveCartBtn) {
+    saveCartBtn.addEventListener("click", () => {
+      saveCart();
+      showNotificationModal("Carrito Guardado", "El contenido de tu compra quedó guardado de forma segura en este navegador.");
+    });
+  }
+
+  const shareCartBtn = document.getElementById("btn-share-cart");
+  if (shareCartBtn) {
+    shareCartBtn.addEventListener("click", shareCartUrl);
+  }
 
   // Modal de checkout
   const checkoutBtn = document.getElementById("checkout-btn");
@@ -209,23 +251,19 @@ const renderSkeleton = () => {
     .join("");
 };
 
-const renderCatalog = () => {
+// Renderizado reactivo del catálogo aceptando lista calculada
+const renderCatalog = (catalogData = null) => {
   const grid = document.getElementById("catalog-grid");
-  const filtered = products.filter((p) => {
-    const matchText = p.name.toLowerCase().includes(currentFilter.text);
-    const matchCat =
-      currentFilter.category === "all" || p.category === currentFilter.category;
-    const finalPrice = p.isOffer ? p.priceOffer : p.priceRegular;
-    const matchPrice = finalPrice <= currentFilter.maxPrice;
-    return matchText && matchCat && matchPrice;
-  });
+  if (!grid) return;
 
-  if (filtered.length === 0) {
-    grid.innerHTML = `<p class="text-gray-400 col-span-full text-center py-10">No se encontraron productos.</p>`;
+  const dataToRender = catalogData !== null ? catalogData : products;
+
+  if (!dataToRender || dataToRender.length === 0) {
+    grid.innerHTML = `<p class="text-gray-400 col-span-full text-center py-10">No se encontraron productos disponibles para este filtro.</p>`;
     return;
   }
 
-  grid.innerHTML = filtered
+  grid.innerHTML = dataToRender
     .map((p) => {
       let totalStock = 0;
       p.variants?.forEach((v) => {
@@ -439,13 +477,23 @@ const closeDrawer = () => {
   document.getElementById("drawer-overlay").classList.remove("open");
 };
 
-// Recuperador de Carrito URL
+// Generación y copia del enlace Base64 del carrito
 const shareCartUrl = () => {
-  const base64cart = btoa(JSON.stringify(cart));
-  const url = `${window.location.origin}${window.location.pathname}?cart=${base64cart}`;
-  navigator.clipboard
-    .writeText(url)
-    .then(() => alert("¡Enlace de carrito copiado! Compártelo."));
+  if (!cart || cart.length === 0) {
+    showNotificationModal("Carrito Vacío", "No tienes productos en el carro para compartir.");
+    return;
+  }
+  try {
+    const base64cart = btoa(unescape(encodeURIComponent(JSON.stringify(cart))));
+    const url = `${window.location.origin}${window.location.pathname}?cart=${base64cart}`;
+    navigator.clipboard.writeText(url).then(() => {
+      showNotificationModal("Enlace Generado", "El enlace de tu carrito se copió al portapapeles. Ya puedes enviarlo.");
+    }).catch(() => {
+      showNotificationModal("Aviso", `Copia este enlace manualmente:\n${url}`);
+    });
+  } catch (err) {
+    console.error("Error al codificar el carrito:", err);
+  }
 };
 
 const recoverCartFromUrl = () => {
@@ -464,61 +512,84 @@ const recoverCartFromUrl = () => {
   }
 };
 
-// Checkout & Validación RegEx & WhatsApp Segura
+// Validación integral de checkout y formateo de orden para WhatsApp
 const processCheckout = () => {
   if (!cart || cart.length === 0) {
-    return alert("Tu carrito está vacío. Agrega prendas antes de continuar.");
+    showNotificationModal("Carro Vacío", "No tienes artículos agregados en la orden.");
+    return;
   }
 
-  const name = sanitizeInput(document.getElementById("chk-name").value);
-  const phone = sanitizeInput(document.getElementById("chk-phone").value);
-  const addr = sanitizeInput(document.getElementById("chk-addr").value);
+  const firstName = sanitizeInput(document.getElementById("chk-firstname")?.value.trim() || "");
+  const lastName = sanitizeInput(document.getElementById("chk-lastname")?.value.trim() || "");
+  const phone = sanitizeInput(document.getElementById("chk-phone")?.value.trim() || "");
+  const city = sanitizeInput(document.getElementById("chk-city")?.value.trim() || "");
+  const postal = sanitizeInput(document.getElementById("chk-postal")?.value.trim() || "");
+  const addr = sanitizeInput(document.getElementById("chk-addr")?.value.trim() || "");
+  const extraAddr = sanitizeInput(document.getElementById("chk-extra-addr")?.value.trim() || "");
+  const paymentMethod = document.getElementById("chk-payment-method")?.value || "Transferencia Bancaria";
 
-  const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/;
+  const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{2,}$/;
   const phoneRegex = /^\d{7,15}$/;
 
-  if (!nameRegex.test(name))
-    return alert("El nombre solo debe contener letras.");
-  if (!phoneRegex.test(phone))
-    return alert("El teléfono debe contener entre 7 y 15 dígitos numéricos.");
-  if (addr.trim() === "") return alert("La dirección es obligatoria.");
+  // Reglas de validación
+  if (!nameRegex.test(firstName)) {
+    showNotificationModal("Datos Incompletos", "Por favor ingresa un nombre válido (solo letras).");
+    return;
+  }
+  if (!nameRegex.test(lastName)) {
+    showNotificationModal("Datos Incompletos", "Por favor ingresa un apellido válido (solo letras).");
+    return;
+  }
+  if (!phoneRegex.test(phone)) {
+    showNotificationModal("Teléfono Inválido", "Ingresa un número telefónico válido de entre 7 y 15 dígitos.");
+    return;
+  }
+  if (!city && !postal) {
+    showNotificationModal("Ubicación Requerida", "Debes especificar la Ciudad o, en su defecto, el Código Postal.");
+    return;
+  }
+  if (!addr) {
+    showNotificationModal("Dirección Requerida", "Por favor especifica la dirección de entrega.");
+    return;
+  }
 
   const finalTotal = document.getElementById("final-buy-btn").dataset.total;
-
-  let msg = `🔥 *NUEVO PEDIDO WZSTORE* 🔥\n\n👤 Cliente: ${name}\n📍 Dirección: ${addr}\n📞 Tel: ${phone}\n\n*Detalle del Pedido:*\n`;
   let totalRegular = 0;
 
-  // Construcción del detalle y cálculo de precio regular en una sola pasada
+  let msg = `🔥 *NUEVO PEDIDO WZSTORE* 🔥\n\n`;
+  msg += `👤 *Cliente:* ${firstName} ${lastName}\n`;
+  msg += `📞 *Teléfono:* ${phone}\n`;
+  msg += `📍 *Dirección:* ${addr}${extraAddr ? ` (${extraAddr})` : ""}\n`;
+  msg += `🏙️ *Ubicación:* ${city ? city : "C.P. " + postal}${postal && city ? ` (C.P. ${postal})` : ""}\n`;
+  msg += `💳 *Método de Pago:* ${paymentMethod}\n`;
+  msg += `🚚 *Modalidad de Envío:* ${shippingType === "local" ? "Local" : "Nacional"}\n\n`;
+  msg += `*Prendas Solicitadas:*\n`;
+
   cart.forEach((item) => {
-    msg += `▪ ${item.name}\n  Color: ${item.color} | Talla: ${item.size} | Cantidad: ${item.qty}\n`;
-    const regularItemPrice = item.priceRegular || item.price;
-    totalRegular += regularItemPrice * item.qty;
+    msg += `▪ ${item.name}\n   Color: ${item.color} | Talla: ${item.size} | Cant: ${item.qty} | Sub: $${(item.price * item.qty).toLocaleString("es-CO")}\n`;
+    totalRegular += (item.priceRegular || item.price) * item.qty;
   });
 
-  // El ahorro toma en cuenta ofertas directas y cupones sobre el valor final
   const totalSavings = totalRegular - Number(finalTotal);
-
-  msg += `\n💰 *Total a liquidar: $${Number(finalTotal).toLocaleString('es-CO')} COP*\n`;
+  msg += `\n💰 *Total Liquidado: $${Number(finalTotal).toLocaleString("es-CO")} COP*\n`;
   if (totalSavings > 0) {
-    msg += `🏷️ *¡Ahorro total en esta orden por promociones de WZSTORE: $${totalSavings.toLocaleString('es-CO')} COP!*\n`;
+    msg += `🏷️ *Ahorro en Descuentos: $${totalSavings.toLocaleString("es-CO")} COP*\n`;
   }
-  if (appliedCoupon) msg += `🎟️ Cupón aplicado: ${appliedCoupon}\n`;
+  if (appliedCoupon) {
+    msg += `🎟️ *Cupón Redimido:* ${appliedCoupon}\n`;
+  }
 
-  const url = `https://wa.me/573006724082?text=${encodeURIComponent(msg)}`;
-  
-  // Redirección segura
-  window.open(url, "_blank", "noopener,noreferrer");
+  const whatsappUrl = `https://wa.me/573006724082?text=${encodeURIComponent(msg)}`;
+  window.open(whatsappUrl, "_blank", "noopener,noreferrer");
 
-  // Limpieza y reseteo post-compra
+  // Vaciar carrito y cerrar modal tras despachar la orden
   cart = [];
   appliedCoupon = null;
-  if (typeof saveCart === "function") saveCart();
-  if (typeof updateCartUI === "function") updateCartUI();
+  saveCart();
+  updateCartUI();
 
-  // Cierre del modal de checkout
-  const checkoutModal = document.getElementById("checkout-modal") || document.getElementById("modal-checkout");
+  const checkoutModal = document.getElementById("modal-checkout");
   if (checkoutModal) {
-    checkoutModal.classList.add("hidden");
     checkoutModal.classList.remove("active");
   }
 };
@@ -596,4 +667,27 @@ window.openSupportChat = () => {
   const encodedText = encodeURIComponent(WZ_SUPPORT_CONFIG.defaultMessage);
   const supportUrl = `https://wa.me/${WZ_SUPPORT_CONFIG.phone}?text=${encodedText}`;
   window.open(supportUrl, "_blank", "noopener,noreferrer");
+};
+
+// Controlador de notificaciones modales flotantes no invasivas
+window.showNotificationModal = (title, message) => {
+  const modal = document.getElementById("wz-alert-modal");
+  const titleEl = document.getElementById("wz-alert-title");
+  const bodyEl = document.getElementById("wz-alert-body");
+
+  if (titleEl) titleEl.textContent = title;
+  if (bodyEl) bodyEl.textContent = message;
+
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+  }
+};
+
+window.closeNotificationModal = () => {
+  const modal = document.getElementById("wz-alert-modal");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
 };

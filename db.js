@@ -1,3 +1,4 @@
+// Base de datos semilla estandarizada con llaves completas y saneamiento de sintaxis JSON
 const INITIAL_DATABASE = [
   {
     id: "wz-uuid-str-" + (Date.now() + 1),
@@ -12,10 +13,13 @@ const INITIAL_DATABASE = [
     pointsAwarded: 80,
     variants: [
       {
-        color: "Negro Obsidiana", colorHex: "#111827",
+        color: "Negro Obsidiana",
+        colorHex: "#111827",
         sizes: [
-          { size: "S", stock: 15 }, { size: "M", stock: 8 },
-          { size: "L", stock: 1 }, { size: "XL", stock: 0 }
+          { size: "S", stock: 15 },
+          { size: "M", stock: 8 },
+          { size: "L", stock: 1 },
+          { size: "XL", stock: 0 }
         ]
       }
     ]
@@ -33,8 +37,13 @@ const INITIAL_DATABASE = [
     pointsAwarded: 60,
     variants: [
       {
-        color: "Gris Asfalto", colorHex: "#374151",
-        sizes: [ { size: "S", stock: 0 }, { size: "M", stock: 12 }, { size: "L", stock: 5 } ]
+        color: "Gris Asfalto",
+        colorHex: "#374151",
+        sizes: [
+          { size: "S", stock: 0 },
+          { size: "M", stock: 12 },
+          { size: "L", stock: 5 }
+        ]
       }
     ]
   },
@@ -51,8 +60,13 @@ const INITIAL_DATABASE = [
     pointsAwarded: 200,
     variants: [
       {
-        color: "Rojo Carmesí", colorHex: "#dc2626",
-        sizes: [ { size: "40", stock: 4 }, { size: "41", stock: 1 }, { size: "42", stock: 6 } ]
+        color: "Rojo Carmesí",
+        colorHex: "#dc2626",
+        sizes: [
+          { size: "40", stock: 4 },
+          { size: "41", stock: 1 },
+          { size: "42", stock: 6 }
+        ]
       }
     ]
   },
@@ -69,8 +83,12 @@ const INITIAL_DATABASE = [
     pointsAwarded: 95,
     variants: [
       {
-        color: "Blanco Titanio", colorHex: "#f8fafc",
-        sizes: [ { size: "S", stock: 2 }, { size: "M", stock: 1 } ]
+        color: "Blanco Titanio",
+        colorHex: "#f8fafc",
+        sizes: [
+          { size: "S", stock: 2 },
+          { size: "M", stock: 1 }
+        ]
       }
     ]
   },
@@ -87,8 +105,12 @@ const INITIAL_DATABASE = [
     pointsAwarded: 25,
     variants: [
       {
-        color: "Negro", colorHex: "#000000",
-        sizes: [ { size: "M", stock: 20 }, { size: "L", stock: 14 } ]
+        color: "Negro",
+        colorHex: "#000000",
+        sizes: [
+          { size: "M", stock: 20 },
+          { size: "L", stock: 14 }
+        ]
       }
     ]
   },
@@ -105,8 +127,13 @@ const INITIAL_DATABASE = [
     pointsAwarded: 40,
     variants: [
       {
-        color: "Verde Militar", colorHex: "#4d7c0f",
-        sizes: [ { size: "S", stock: 8 }, { size: "M", stock: 10 }, { size: "L", stock: 2 } ]
+        color: "Verde Militar",
+        colorHex: "#4d7c0f",
+        sizes: [
+          { size: "S", stock: 8 },
+          { size: "M", stock: 10 },
+          { size: "L", stock: 2 }
+        ]
       }
     ]
   },
@@ -123,8 +150,13 @@ const INITIAL_DATABASE = [
     pointsAwarded: 35,
     variants: [
       {
-        color: "Rosa Neón", colorHex: "#db2777",
-        sizes: [ { size: "S", stock: 3 }, { size: "M", stock: 0 }, { size: "L", stock: 6 } ]
+        color: "Rosa Neón",
+        colorHex: "#db2777",
+        sizes: [
+          { size: "S", stock: 3 },
+          { size: "M", stock: 0 },
+          { size: "L", stock: 6 }
+        ]
       }
     ]
   },
@@ -141,8 +173,11 @@ const INITIAL_DATABASE = [
     pointsAwarded: 110,
     variants: [
       {
-        color: "Camuflaje Urbano", colorHex: "#1f2937",
-        sizes: [ { size: "ÚNICA", stock: 5 } ]
+        color: "Camuflaje Urbano",
+        colorHex: "#1f2937",
+        sizes: [
+          { size: "ÚNICA", stock: 5 }
+        ]
       }
     ]
   }

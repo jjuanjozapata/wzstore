@@ -673,105 +673,144 @@ window.removeVariantColor = function (idx) {
   renderVariantsList();
 };
 
-// Guardar o Actualizar Producto
+// Guardar o Actualizar Producto con preservación de multimedia y saneamiento de estados
 form.addEventListener("submit", (e) => {
   e.preventDefault();
   if (currentVariants.length === 0) {
-    alert(
-      "Debes agregar al menos una variante (Color/Talla/Stock) para listar el producto.",
-    );
+    alert("Debes agregar al menos una variante (Color/Talla/Stock) para listar el producto.");
     return;
   }
 
   const priceReg = Number(document.getElementById("prod-price").value);
   const isOffer = document.getElementById("prod-is-offer").checked;
   const discount = Number(document.getElementById("prod-discount").value);
-  const priceOff = isOffer
-    ? Math.round(priceReg * (1 - discount / 100))
-    : priceReg;
+  const priceOff = isOffer ? Math.round(priceReg * (1 - discount / 100)) : priceReg;
+  const hiddenId = document.getElementById("product-id")?.value;
+  const targetId = editingId || hiddenId;
 
-  const newProduct = {
-    id: editingId ? editingId : "wz-" + Date.now(),
-    name: sanitizeInput(document.getElementById('prod-name').value),
-    description: sanitizeInput(document.getElementById('prod-desc').value),
+  let products = loadProducts();
+  const existingProduct = targetId ? products.find((p) => p.id === targetId) : null;
+
+  // Preservar imágenes originales si no se incorporaron nuevas en el búfer
+  let finalImages = [];
+  if (mediaBuffer.images.length > 0) {
+    finalImages = [...mediaBuffer.images];
+  } else if (existingProduct?.media?.images?.length > 0) {
+    finalImages = [...existingProduct.media.images];
+  } else if (existingProduct?.imageUrl) {
+    finalImages = [existingProduct.imageUrl];
+  } else {
+    finalImages = ["https://images.unsplash.com/photo-1581636625402-29f2a01222ce"];
+  }
+
+  // Preservar video existente si no se reemplazó
+  const finalVideo = mediaBuffer.video || existingProduct?.media?.video || "";
+
+  // Calcular si existe stock físico real en las variantes cargadas
+  let totalStock = 0;
+  currentVariants.forEach((v) => {
+    v.sizes?.forEach((s) => (totalStock += Number(s.stock) || 0));
+  });
+
+  // Mantener consistencia del switch de disponibilidad
+  const preservedAvailability = existingProduct ? existingProduct.isAvailable !== false && totalStock > 0 : totalStock > 0;
+  const preservedStatus = existingProduct ? (totalStock > 0 && existingProduct.status !== "agotado" ? "disponible" : "agotado") : (totalStock > 0 ? "disponible" : "agotado");
+
+  const productData = {
+    id: targetId ? targetId : "wz-" + Date.now(),
+    name: sanitizeInput(document.getElementById("prod-name").value),
+    description: sanitizeInput(document.getElementById("prod-desc").value),
     category: document.getElementById("prod-category").value,
     media: {
-      images:
-        mediaBuffer.images.length > 0
-          ? mediaBuffer.images
-          : [
-              document.getElementById("prod-image")?.value ||
-                "https://images.unsplash.com/photo-1581636625402-29f2a01222ce",
-            ],
-      video: mediaBuffer.video || "",
+      images: finalImages,
+      video: finalVideo,
     },
-    imageUrl:
-      mediaBuffer.images[0] ||
-      document.getElementById("prod-image")?.value ||
-      "https://images.unsplash.com/photo-1581636625402-29f2a01222ce",
+    imageUrl: finalImages[0],
     priceRegular: priceReg,
     isOffer: isOffer,
     priceOffer: priceOff,
-    isAvailable: true,
+    isAvailable: preservedAvailability,
+    status: preservedStatus,
     variants: currentVariants,
   };
 
-  let products = loadProducts();
-  if (editingId) {
-    const index = products.findIndex((p) => p.id === editingId);
-    products[index] = { ...products[index], ...newProduct };
+  if (targetId) {
+    const index = products.findIndex((p) => p.id === targetId);
+    if (index > -1) {
+      products[index] = { ...products[index], ...productData };
+    } else {
+      products.push(productData);
+    }
   } else {
-    products.push(newProduct);
+    products.push(productData);
   }
 
+  // Guardado en LocalStorage y reseteo integral de variables de control
   saveProducts(products);
+  editingId = null;
+  const hiddenIdInput = document.getElementById("product-id");
+  if (hiddenIdInput) hiddenIdInput.value = "";
+
   closeModal();
   mediaBuffer = { images: [], video: "" };
   renderMediaPreviews();
   renderInventoryTable();
 });
 
-// Cargar producto para Editar
+
+// Cargar producto para Editar con mapeo seguro al DOM
 window.editProduct = function (id) {
   const products = loadProducts();
   const p = products.find((x) => x.id === id);
   if (!p) return;
 
+  // Asignar identificador global e input oculto para no perder la referencia original
   editingId = p.id;
+  const hiddenIdInput = document.getElementById("product-id");
+  if (hiddenIdInput) hiddenIdInput.value = p.id;
+
+  // Cambiar encabezado del modal
   document.getElementById("crud-modal-title").innerText = "Editar Prenda";
 
-  document.getElementById("prod-name").value = p.name;
-  document.getElementById("prod-desc").value = p.description;
-  document.getElementById("prod-category").value = p.category;
-  document.getElementById("prod-image").value = p.imageUrl;
-  document.getElementById("prod-price").value = p.priceRegular;
+  // Carga de campos de texto b sicos
+  document.getElementById("prod-name").value = p.name || "";
+  document.getElementById("prod-desc").value = p.description || "";
+  document.getElementById("prod-category").value = p.category || "hombre";
+  document.getElementById("prod-price").value = p.priceRegular || 0;
 
-  document.getElementById("prod-is-offer").checked = p.isOffer;
-  if (p.isOffer) {
+  // Asignaci n y sincronizaci n del estado de oferta
+  const offerToggle = document.getElementById("prod-is-offer");
+  offerToggle.checked = Boolean(p.isOffer);
+
+  if (p.isOffer && p.priceRegular > 0) {
     document.getElementById("offer-controls").classList.remove("hidden");
-    // Calcular porcentaje inverso
-    const percent = Math.round((1 - p.priceOffer / p.priceRegular) * 100);
-    document.getElementById("prod-discount").value = percent;
+    // Calcular el porcentaje de descuento previamente aplicado
+    const percent = Math.round((1 - (p.priceOffer / p.priceRegular)) * 100);
+    document.getElementById("prod-discount").value = percent > 0 ? percent : 10;
     calculateOfferPrice();
   } else {
     document.getElementById("offer-controls").classList.add("hidden");
   }
 
-  // Clonar arreglo profundo para no mutar el original antes de guardar
+  // Clonar arreglo de variantes para evitar mutaciones directas en memoria
   currentVariants = JSON.parse(JSON.stringify(p.variants || []));
   renderVariantsList();
 
+  // Reconstruir buffer multimedia preservando im genes y video previos
+  const preservedImages = Array.isArray(p.media?.images) && p.media.images.length > 0
+    ? [...p.media.images]
+    : (p.imageUrl ? [p.imageUrl] : []);
+
   mediaBuffer = {
-    images: p.media?.images
-      ? [...p.media.images]
-      : p.imageUrl
-        ? [p.imageUrl]
-        : [],
-    video: p.media?.video || "",
+    images: preservedImages,
+    video: p.media?.video || ""
   };
+
+  // Renderizar vistas previas multimedia y activar listeners de drag & drop
   renderMediaPreviews();
   initMediaDropZone();
 
+  // Desplegar el modal visualmente
   modal.classList.remove("hidden");
   setTimeout(() => modal.classList.remove("opacity-0"), 10);
 };

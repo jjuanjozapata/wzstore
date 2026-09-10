@@ -17,6 +17,7 @@ const sanitizeInput = (str) => {
 let products = [];
 let cart = [];
 let uiState = {}; // Guarda estado del selector de color/talla por producto
+// Objeto de filtrado global con valor infinito de precio por defecto para evitar bloqueos
 let currentFilter = {
   text: '',
   category: 'all',
@@ -24,49 +25,49 @@ let currentFilter = {
   size: 'all',
   sport: 'all',
   onlyOffers: false,
-  sortBy: 'default' // 'price-asc', 'price-desc', 'alpha-az', 'discount-desc'
+  sortBy: 'default',
+  maxPrice: Infinity
 };
 
-window.handleParentCategory = (cat) => {
-  currentFilter.category = cat;
-  const modal = document.getElementById('gender-discriminator');
-  if (cat !== 'all' && cat !== 'Accesorios') {
-    modal.classList.remove('hidden');
-  } else {
-    modal.classList.add('hidden');
-    currentFilter.gender = 'ambos';
-  }
-  executeMasterFilters();
-};
-
-window.applyGenderFilter = (gender) => {
-  currentFilter.gender = gender;
-  document.getElementById('gender-discriminator').classList.add('hidden');
-  executeMasterFilters();
-};
-
-// Motor Algorítmico Multidimensional
+// Motor Algorítmico Multidimensional con conexión al renderizador universal
 const executeMasterFilters = () => {
   let result = [...products];
 
-  // 1. Filtro Texto
+  // 1. Filtro por coincidencia de texto
   if (currentFilter.text) {
-    result = result.filter(p => p.name.toLowerCase().includes(currentFilter.text));
-  }
-  // 2. Filtro Categoría Padre
-  if (currentFilter.category !== 'all') {
-    result = result.filter(p => p.category?.toLowerCase() === currentFilter.category.toLowerCase() || p.type?.toLowerCase() === currentFilter.category.toLowerCase());
-  }
-  // 3. Filtro Género
-  if (currentFilter.gender !== 'ambos') {
-    result = result.filter(p => p.gender?.toLowerCase() === currentFilter.gender.toLowerCase() || p.category?.toLowerCase() === currentFilter.gender.toLowerCase());
-  }
-  // 4. Filtro Ofertas Activas
-  if (currentFilter.onlyOffers) {
-    result = result.filter(p => p.isOffer);
+    result = result.filter((p) => p.name.toLowerCase().includes(currentFilter.text));
   }
 
-  // 5. Algoritmo de Ordenamiento
+  // 2. Filtro por Categoría
+  if (currentFilter.category !== 'all') {
+    result = result.filter((p) => 
+      p.category?.toLowerCase() === currentFilter.category.toLowerCase() || 
+      p.type?.toLowerCase() === currentFilter.category.toLowerCase()
+    );
+  }
+
+  // 3. Filtro por Segmento de Género
+  if (currentFilter.gender !== 'ambos') {
+    result = result.filter((p) => 
+      p.gender?.toLowerCase() === currentFilter.gender.toLowerCase() || 
+      p.category?.toLowerCase() === currentFilter.gender.toLowerCase()
+    );
+  }
+
+  // 4. Filtro por Ofertas Activas
+  if (currentFilter.onlyOffers) {
+    result = result.filter((p) => p.isOffer);
+  }
+
+  // 5. Filtro de Precio
+  if (currentFilter.maxPrice !== Infinity && !isNaN(currentFilter.maxPrice)) {
+    result = result.filter((p) => {
+      const price = p.isOffer ? p.priceOffer : p.priceRegular;
+      return price <= currentFilter.maxPrice;
+    });
+  }
+
+  // 6. Algoritmo de Ordenamiento
   switch (currentFilter.sortBy) {
     case 'price-asc':
       result.sort((a, b) => (a.isOffer ? a.priceOffer : a.priceRegular) - (b.isOffer ? b.priceOffer : b.priceRegular));
@@ -86,8 +87,12 @@ const executeMasterFilters = () => {
       break;
   }
 
-  renderFilteredCatalog(result);
+  // Despliegue de la lista procesada sin fallos de referencia
+  renderCatalog(result);
 };
+
+// Exposición como alias para preservar compatibilidad en cascada
+window.renderFilteredCatalog = (customList) => renderCatalog(customList);
 
 // Variables de Envío y Cupones
 let appliedCoupon = null; // 'WZ2026' | 'FREEATHLETE'
@@ -124,69 +129,77 @@ const initApp = () => {
 };
 
 const setupEventListeners = () => {
-  // Filtros Concurrentes con Debounce
+  // Filtro de b squeda por texto reactivo
   let debounceTimer;
-  document.getElementById("search-input").addEventListener("input", (e) => {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      currentFilter.text = sanitizeInput(e.target.value.toLowerCase());
-      renderCatalog();
-    }, 300);
-  });
-
-  document.getElementById("price-range").addEventListener("input", (e) => {
-    currentFilter.maxPrice = parseInt(e.target.value);
-    document.getElementById("price-label").textContent =
-      `$${currentFilter.maxPrice.toLocaleString()}`;
-    renderCatalog();
-  });
-
-  document.querySelectorAll(".cat-btn").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      document
-        .querySelectorAll(".cat-btn")
-        .forEach((b) => b.classList.remove("bg-green-500", "text-white"));
-      e.target.classList.add("bg-green-500", "text-white");
-      currentFilter.category = e.target.dataset.cat;
-      renderCatalog();
+  const searchInput = document.getElementById("search-input");
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        currentFilter.text = sanitizeInput(e.target.value.toLowerCase());
+        executeMasterFilters();
+      }, 300);
     });
-  });
+  }
 
-  // Drawer
-  document.getElementById("cart-btn").addEventListener("click", openDrawer);
-  document
-    .getElementById("close-drawer")
-    .addEventListener("click", closeDrawer);
-  document
-    .getElementById("drawer-overlay")
-    .addEventListener("click", closeDrawer);
+ // Escucha defensiva de rango de precio para evitar TypeErrors si el control no está en el DOM
+  const priceRangeInput = document.getElementById("price-range");
+  if (priceRangeInput) {
+    priceRangeInput.addEventListener("input", (e) => {
+      currentFilter.maxPrice = parseInt(e.target.value, 10);
+      const priceLabel = document.getElementById("price-label");
+      if (priceLabel) {
+        priceLabel.textContent = `$${currentFilter.maxPrice.toLocaleString()}`;
+      }
+      executeMasterFilters();
+    });
+  }
 
-  // Lógica Carrito (Cupones y Envío)
-  document
-    .getElementById("apply-coupon")
-    .addEventListener("click", applyCouponLogic);
-  document.getElementById("shipping-select").addEventListener("change", (e) => {
-    shippingType = e.target.value;
-    updateCartUI();
-  });
+  // Drawer del carrito
+  const cartBtn = document.getElementById("cart-btn");
+  if (cartBtn) cartBtn.addEventListener("click", openDrawer);
 
-  // Compartir Carrito
-  document
-    .getElementById("share-cart-btn")
-    .addEventListener("click", shareCartUrl);
+  const closeDrawerBtn = document.getElementById("close-drawer");
+  if (closeDrawerBtn) closeDrawerBtn.addEventListener("click", closeDrawer);
 
-  // Checkout
-  document.getElementById("checkout-btn").addEventListener("click", () => {
-    if (cart.length === 0) return;
-    document.getElementById("modal-checkout").classList.add("active");
-    closeDrawer();
-  });
-  document.getElementById("close-modal").addEventListener("click", () => {
-    document.getElementById("modal-checkout").classList.remove("active");
-  });
-  document
-    .getElementById("final-buy-btn")
-    .addEventListener("click", processCheckout);
+  const drawerOverlay = document.getElementById("drawer-overlay");
+  if (drawerOverlay) drawerOverlay.addEventListener("click", closeDrawer);
+
+  // Cupones y tarifas log sticas
+  const applyCouponBtn = document.getElementById("apply-coupon");
+  if (applyCouponBtn) applyCouponBtn.addEventListener("click", applyCouponLogic);
+
+  const shippingSelect = document.getElementById("shipping-select");
+  if (shippingSelect) {
+    shippingSelect.addEventListener("change", (e) => {
+      shippingType = e.target.value;
+      updateCartUI();
+    });
+  }
+
+  // Compartir carrito por URL
+  const shareCartBtn = document.getElementById("share-cart-btn");
+  if (shareCartBtn) shareCartBtn.addEventListener("click", shareCartUrl);
+
+  // Modal de checkout
+  const checkoutBtn = document.getElementById("checkout-btn");
+  if (checkoutBtn) {
+    checkoutBtn.addEventListener("click", () => {
+      if (cart.length === 0) return;
+      document.getElementById("modal-checkout")?.classList.add("active");
+      closeDrawer();
+    });
+  }
+
+  const closeModalBtn = document.getElementById("close-modal");
+  if (closeModalBtn) {
+    closeModalBtn.addEventListener("click", () => {
+      document.getElementById("modal-checkout")?.classList.remove("active");
+    });
+  }
+
+  const finalBuyBtn = document.getElementById("final-buy-btn");
+  if (finalBuyBtn) finalBuyBtn.addEventListener("click", processCheckout);
 };
 
 // Renderizado Catálogo
@@ -574,4 +587,19 @@ window.calculateRecommendedSize = () => {
 
   out.classList.remove('hidden');
   out.innerHTML = `Tu talla recomendada para corte de compresión es: <strong class="text-emerald-400 text-sm font-black">${size}</strong>`;
+};
+
+// ==========================================
+// CANAL EXCLUSIVO DE ATENCIÓN Y SOPORTE (POSTVENTA)
+// ==========================================
+// Configuración parametrizable del canal de ayuda (línea independiente de ventas)
+const WZ_SUPPORT_CONFIG = {
+  phone: "573159998877", // Número de soporte técnico y atención posventa
+  defaultMessage: "Hola WZSTORE, necesito ayuda con una consulta sobre la tienda."
+};
+
+window.openSupportChat = () => {
+  const encodedText = encodeURIComponent(WZ_SUPPORT_CONFIG.defaultMessage);
+  const supportUrl = `https://wa.me/${WZ_SUPPORT_CONFIG.phone}?text=${encodedText}`;
+  window.open(supportUrl, "_blank", "noopener,noreferrer");
 };

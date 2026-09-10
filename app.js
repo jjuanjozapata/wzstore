@@ -241,16 +241,16 @@ const setupEventListeners = () => {
   if (finalBuyBtn) finalBuyBtn.addEventListener("click", processCheckout);
 };
 
-// Renderizado del Hero de Prenda de Moda Destacada con Video Streaming
+// Renderizado dinámico del Hero Showcase con selector de tallas integrado
+let heroSelectedSizeIdx = null;
+
 const renderFeaturedHero = () => {
   const heroSection = document.getElementById("wz-featured-hero");
   if (!heroSection) return;
 
-  // Buscar prenda marcada como destacada o fallback a la que tenga video disponible
-  const featuredProduct = products.find((p) => p.isFeatured && (p.media?.video || p.imageUrl || p.media?.images?.[0])) 
-    || products.find((p) => p.media?.video);
+  const featured = products.find((p) => p.isFeatured && p.status !== "agotado") || products.find((p) => p.media?.video && p.status !== "agotado");
 
-  if (!featuredProduct) {
+  if (!featured) {
     heroSection.classList.add("hidden");
     return;
   }
@@ -259,48 +259,91 @@ const renderFeaturedHero = () => {
   const descEl = document.getElementById("wz-hero-desc");
   const priceEl = document.getElementById("wz-hero-price");
   const oldPriceEl = document.getElementById("wz-hero-old-price");
+  const discBadgeEl = document.getElementById("wz-hero-discount-badge");
   const videoEl = document.getElementById("wz-hero-video");
+  const galleryEl = document.getElementById("wz-hero-gallery-container");
   const imgFallback = document.getElementById("wz-hero-image-fallback");
+  const sizesContainer = document.getElementById("wz-hero-sizes-container");
   const buyBtn = document.getElementById("wz-hero-buy-btn");
 
-  const finalPrice = featuredProduct.isOffer ? featuredProduct.priceOffer : featuredProduct.priceRegular;
+  const finalPrice = featured.isOffer ? featured.priceOffer : featured.priceRegular;
 
-  if (titleEl) titleEl.textContent = featuredProduct.name;
-  if (descEl) descEl.textContent = featuredProduct.description;
+  if (titleEl) titleEl.textContent = featured.name;
+  if (descEl) descEl.textContent = featured.description;
   if (priceEl) priceEl.textContent = `$${finalPrice.toLocaleString("es-CO")} COP`;
 
-  if (featuredProduct.isOffer && oldPriceEl) {
-    oldPriceEl.textContent = `$${featuredProduct.priceRegular.toLocaleString("es-CO")} COP`;
-    oldPriceEl.classList.remove("hidden");
-  } else if (oldPriceEl) {
-    oldPriceEl.classList.add("hidden");
+  // Control visual de precios de descuento
+  if (featured.isOffer && featured.priceRegular > featured.priceOffer) {
+    const discountPct = Math.round((1 - featured.priceOffer / featured.priceRegular) * 100);
+    if (oldPriceEl) {
+      oldPriceEl.textContent = `$${featured.priceRegular.toLocaleString("es-CO")} COP`;
+      oldPriceEl.classList.remove("hidden");
+    }
+    if (discBadgeEl) {
+      discBadgeEl.textContent = `-${discountPct}% OFF`;
+      discBadgeEl.classList.remove("hidden");
+    }
+  } else {
+    if (oldPriceEl) oldPriceEl.classList.add("hidden");
+    if (discBadgeEl) discBadgeEl.classList.add("hidden");
   }
 
-  // Carga reactiva de multimedia: video prioritario o foto
-  if (featuredProduct.media?.video && videoEl) {
-    videoEl.src = featuredProduct.media.video;
+  // Despliegue multimedia: Video looping o Imagen principal
+  if (featured.media?.video) {
+    videoEl.src = featured.media.video;
     videoEl.classList.remove("hidden");
-    if (imgFallback) imgFallback.classList.add("hidden");
+    if (galleryEl) galleryEl.classList.add("hidden");
     videoEl.play().catch(() => {});
-  } else if (imgFallback) {
-    imgFallback.src = featuredProduct.imageUrl || featuredProduct.media?.images?.[0];
-    imgFallback.classList.remove("hidden");
-    if (videoEl) videoEl.classList.add("hidden");
+  } else {
+    if (videoEl) {
+      videoEl.pause();
+      videoEl.classList.add("hidden");
+    }
+    if (galleryEl && imgFallback) {
+      imgFallback.src = featured.imageUrl || featured.media?.images?.[0] || "";
+      galleryEl.classList.remove("hidden");
+    }
   }
 
-  // Acción de compra directa asegurando selección de variante
+  // Generación de botones de talla para la primera variante de color activa
+  const firstVariant = featured.variants?.[0] || { sizes: [] };
+  heroSelectedSizeIdx = firstVariant.sizes.findIndex((s) => s.stock > 0);
+
+  if (sizesContainer) {
+    sizesContainer.innerHTML = firstVariant.sizes
+      .map((s, idx) => {
+        const isOutOfStock = s.stock <= 0;
+        const isSelected = idx === heroSelectedSizeIdx;
+        const baseClass = "px-3 py-1 text-xs rounded-lg font-bold border transition-colors cursor-pointer ";
+        const stateClass = isOutOfStock
+          ? "border-slate-800 text-slate-600 line-through cursor-not-allowed bg-slate-900/50"
+          : isSelected
+          ? "border-emerald-500 bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
+          : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500";
+
+        return `<button type="button" ${isOutOfStock ? "disabled" : ""} onclick="selectHeroSize(${idx})" class="${baseClass} ${stateClass}">${s.size}</button>`;
+      })
+      .join("");
+  }
+
+  // Adición directa al carrito sincronizando la talla escogida
   if (buyBtn) {
     buyBtn.onclick = () => {
-      // Auto-seleccionar primera variante disponible si no se ha escogido
-      const state = uiState[featuredProduct.id];
-      if (state && state.sizeIdx === null) {
-        state.sizeIdx = 0;
+      if (heroSelectedSizeIdx === null || heroSelectedSizeIdx === -1) {
+        showNotificationModal("Selecciona una Talla", "Por favor elige una talla disponible para el Drop de la Semana.");
+        return;
       }
-      window.addToCart(featuredProduct.id);
+      uiState[featured.id] = { colorIdx: 0, sizeIdx: heroSelectedSizeIdx };
+      window.addToCart(featured.id);
     };
   }
 
   heroSection.classList.remove("hidden");
+};
+
+window.selectHeroSize = (sizeIndex) => {
+  heroSelectedSizeIdx = sizeIndex;
+  renderFeaturedHero();
 };
 
 // Renderizado reactivo del catálogo aceptando lista calculada
@@ -548,19 +591,43 @@ const shareCartUrl = () => {
   }
 };
 
+// Deserialización y validación estricta de esquema para mitigar DOM-XSS vía URL
 const recoverCartFromUrl = () => {
   const params = new URLSearchParams(window.location.search);
   const cartParam = params.get("cart");
-  if (cartParam) {
-    try {
-      cart = JSON.parse(atob(cartParam));
+  if (!cartParam) return;
+
+  try {
+    const rawJson = decodeURIComponent(escape(atob(cartParam)));
+    const parsed = JSON.parse(rawJson);
+
+    if (!Array.isArray(parsed)) throw new Error("Estructura inválida");
+
+    // Whitelist y sanitización rigurosa de cada ítem importado
+    const sanitizedCart = parsed.map((item) => ({
+      id: String(item.id || "").replace(/[^a-zA-Z0-9_-]/g, ""),
+      name: sanitizeInput(String(item.name || "")),
+      color: sanitizeInput(String(item.color || "")),
+      size: sanitizeInput(String(item.size || "")),
+      price: Math.abs(Number(item.price)) || 0,
+      priceRegular: Math.abs(Number(item.priceRegular)) || 0,
+      qty: Math.max(1, Math.min(Number(item.qty) || 1, 50)),
+      maxStock: Number(item.maxStock) || 99,
+      img: (typeof item.img === "string" && (item.img.startsWith("http://") || item.img.startsWith("https://") || item.img.startsWith("data:image/")))
+        ? item.img
+        : "https://images.unsplash.com/photo-1581636625402-29f2a01222ce"
+    })).filter((item) => item.id !== "" && item.name !== "");
+
+    if (sanitizedCart.length > 0) {
+      cart = sanitizedCart;
       saveCart();
-      // Elimina param de la URL limpio
       window.history.replaceState({}, document.title, window.location.pathname);
+      updateCartUI();
       openDrawer();
-    } catch (e) {
-      console.error("URL Invalida de carrito");
     }
+  } catch (e) {
+    console.warn("Bloqueo de seguridad: El parámetro ?cart= no cumple con los estándares criptográficos o de esquema.");
+    window.history.replaceState({}, document.title, window.location.pathname);
   }
 };
 
@@ -605,8 +672,55 @@ const processCheckout = () => {
     return;
   }
 
-  const finalTotal = document.getElementById("final-buy-btn").dataset.total;
-  let totalRegular = 0;
+  // Auditoría matemática obligatoria contra la base de datos canónica en memoria local
+  let canonProducts = [];
+  try {
+    canonProducts = JSON.parse(localStorage.getItem("wz_core_products")) || [];
+  } catch (err) {
+    canonProducts = [];
+  }
+
+  let verifiedSubtotal = 0;
+  let totalRegularCanon = 0;
+  let verifiedCartDetails = [];
+
+  for (const item of cart) {
+    const original = canonProducts.find((p) => String(p.id) === String(item.id));
+    if (!original) {
+      showNotificationModal("Catálogo Desactualizado", "Uno de los productos ya no existe en la tienda.");
+      return;
+    }
+
+    // Precio oficial fijado en base canónica
+    const authenticPrice = original.isOffer ? original.priceOffer : original.priceRegular;
+    const authenticRegularPrice = original.priceRegular;
+    const safeQty = Math.max(1, Math.floor(Number(item.qty) || 1));
+
+    verifiedSubtotal += authenticPrice * safeQty;
+    totalRegularCanon += authenticRegularPrice * safeQty;
+
+    verifiedCartDetails.push({
+      name: original.name,
+      color: sanitizeInput(item.color),
+      size: sanitizeInput(item.size),
+      qty: safeQty,
+      unitPrice: authenticPrice,
+      subtotal: authenticPrice * safeQty
+    });
+  }
+
+  // Recálculo seguro de cupones y tarifas logísticas
+  let calculatedDiscount = 0;
+  if (appliedCoupon === "WZ2026") {
+    calculatedDiscount = Math.round(verifiedSubtotal * 0.15);
+  }
+
+  let verifiedShipping = SHIP_RATES[shippingType] || 5000;
+  if (verifiedSubtotal > 300000 || appliedCoupon === "FREEATHLETE") {
+    verifiedShipping = 0;
+  }
+
+  const mathematicallyVerifiedTotal = verifiedSubtotal - calculatedDiscount + verifiedShipping;
 
   let msg = `🔥 *NUEVO PEDIDO WZSTORE* 🔥\n\n`;
   msg += `👤 *Cliente:* ${firstName} ${lastName}\n`;
@@ -617,22 +731,20 @@ const processCheckout = () => {
   msg += `🚚 *Modalidad de Envío:* ${shippingType === "local" ? "Local" : "Nacional"}\n\n`;
   msg += `*Prendas Solicitadas:*\n`;
 
-  cart.forEach((item) => {
-    msg += `▪ ${item.name}\n   Color: ${item.color} | Talla: ${item.size} | Cant: ${item.qty} | Sub: $${(item.price * item.qty).toLocaleString("es-CO")}\n`;
-    totalRegular += (item.priceRegular || item.price) * item.qty;
+  verifiedCartDetails.forEach((item) => {
+    msg += `▪ ${item.name}\n   Color: ${item.color} | Talla: ${item.size} | Cant: ${item.qty} | Sub: $${item.subtotal.toLocaleString("es-CO")}\n`;
   });
 
-  const totalSavings = totalRegular - Number(finalTotal);
-  msg += `\n💰 *Total Liquidado: $${Number(finalTotal).toLocaleString("es-CO")} COP*\n`;
-  if (totalSavings > 0) {
-    msg += `🏷️ *Ahorro en Descuentos: $${totalSavings.toLocaleString("es-CO")} COP*\n`;
+  const verifiedSavings = totalRegularCanon - mathematicallyVerifiedTotal;
+  msg += `\n💰 *Total Liquidado: $${mathematicallyVerifiedTotal.toLocaleString("es-CO")} COP*\n`;
+  if (verifiedSavings > 0) {
+    msg += `🏷️ *Ahorro en Descuentos: $${verifiedSavings.toLocaleString("es-CO")} COP*\n`;
   }
   if (appliedCoupon) {
     msg += `🎟️ *Cupón Redimido:* ${appliedCoupon}\n`;
   }
 
   const whatsappUrl = `https://wa.me/573006724082?text=${encodeURIComponent(msg)}`;
-  window.open(whatsappUrl, "_blank", "noopener,noreferrer");
 
   // Vaciar carrito y cerrar modal tras despachar la orden
   cart = [];

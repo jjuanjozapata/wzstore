@@ -46,24 +46,7 @@ const showToast = (message, type = "success") => {
   }, 3500);
 };
 
-// Inicialización de la base de usuarios en almacenamiento local
-const initializeUsersStore = () => {
-  const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
-  if (!storedUsers) {
-    const defaultAccounts = [
-      { username: "juan", password: "juan1234", role: "admin", createdAt: Date.now() },
-      { username: "monitor", password: "wzmonitor2026", role: "worker", createdAt: Date.now() }
-    ];
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(defaultAccounts));
-    return defaultAccounts;
-  }
-  try {
-    return JSON.parse(storedUsers);
-  } catch (err) {
-    console.error("Error al analizar base de usuarios:", err);
-    return [];
-  }
-};
+
 
 const getStoredUsers = () => {
   return JSON.parse(localStorage.getItem(USERS_STORAGE_KEY)) || initializeUsersStore();
@@ -140,16 +123,71 @@ function checkAuth() {
   }
 }
 
-// Validación de credenciales en formulario de Login
-document.getElementById("login-form").addEventListener("submit", (e) => {
+// Función auxiliar de hashing criptográfico unidireccional SHA-256
+const sha256Hex = async (plainText) => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(plainText);
+  const hashBuffer = await window.crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+};
+
+// Hashes precalculados para arranque de seguridad:
+// "juan1234"      -> 99e289bf65d4911d8d5dfbcabdd0cfc5108d6c70fb9073c6dc20d23fb5f782f2
+// "wzmonitor2026" -> 64d0dc372f88421c60633b4976ea65f3d45e054a7c87c04ff2b7ea08d7457bca
+const initializeUsersStore = () => {
+  const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
+  if (!storedUsers) {
+    const defaultAccounts = [
+      { username: "juan", passwordHash: "99e289bf65d4911d8d5dfbcabdd0cfc5108d6c70fb9073c6dc20d23fb5f782f2", role: "admin", createdAt: Date.now() },
+      { username: "monitor", passwordHash: "64d0dc372f88421c60633b4976ea65f3d45e054a7c87c04ff2b7ea08d7457bca", role: "worker", createdAt: Date.now() }
+    ];
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(defaultAccounts));
+    return defaultAccounts;
+  }
+  try {
+    return JSON.parse(storedUsers);
+  } catch (err) {
+    return [];
+  }
+};
+
+// Validación de credenciales con control de tasa y defensa contra fuerza bruta
+document.getElementById("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+
+  const LOCKOUT_KEY = "wz_admin_lockout";
+  const lockoutState = JSON.parse(localStorage.getItem(LOCKOUT_KEY) || '{"attempts": 0, "lockedUntil": 0}');
+  const now = Date.now();
+
+  // Comprobación de ventana de bloqueo activa
+  if (lockoutState.lockedUntil > now) {
+    const remainingSecs = Math.ceil((lockoutState.lockedUntil - now) / 1000);
+    const errorEl = document.getElementById("login-error");
+    errorEl.textContent = `Panel bloqueado temporalmente por seguridad. Reintenta en ${remainingSecs}s.`;
+    errorEl.classList.remove("hidden");
+    return;
+  }
+
   const u = document.getElementById("username").value.trim().toLowerCase();
   const p = document.getElementById("password").value;
+  const incomingHash = await sha256Hex(p);
 
   const users = getStoredUsers();
-  const matchedUser = users.find((user) => user.username.toLowerCase() === u && user.password === p);
+  const matchedUser = users.find((user) => 
+    user.username.toLowerCase() === u && 
+    (user.passwordHash === incomingHash || user.password === p)
+  );
 
   if (matchedUser) {
+    // Si la cuenta estaba en texto plano legado, migrarla a hash
+    if (!matchedUser.passwordHash) {
+      matchedUser.passwordHash = incomingHash;
+      delete matchedUser.password;
+      saveStoredUsers(users);
+    }
+
+    localStorage.removeItem(LOCKOUT_KEY);
     sessionStorage.setItem(
       SESSION_KEY,
       JSON.stringify({
@@ -163,6 +201,16 @@ document.getElementById("login-form").addEventListener("submit", (e) => {
     document.getElementById("password").value = "";
     checkAuth();
   } else {
+    // Registro de intento fallido e imposición de bloqueo tras 3 intentos
+    lockoutState.attempts = (lockoutState.attempts || 0) + 1;
+    if (lockoutState.attempts >= 3) {
+      lockoutState.lockedUntil = now + (15 * 60 * 1000); // 15 minutos
+      lockoutState.attempts = 0;
+      document.getElementById("login-error").textContent = "Demasiados fallos. Acceso bloqueado durante 15 minutos.";
+    } else {
+      document.getElementById("login-error").textContent = `Credenciales inválidas. Te quedan ${3 - lockoutState.attempts} intentos.`;
+    }
+    localStorage.setItem(LOCKOUT_KEY, JSON.stringify(lockoutState));
     document.getElementById("login-error").classList.remove("hidden");
   }
 });
@@ -949,28 +997,103 @@ window.removeVariantColor = function (idx) {
   renderVariantsList();
 };
 
-// Guardar o Actualizar Producto con respaldo real de medios y reseteo de id
-form.addEventListener("submit", (e) => {
-  e.preventDefault();
-  if (currentVariants.length === 0) {
-    alert("Debes agregar al menos una variante (Color/Talla/Stock) para listar el producto.");
+
+
+
+
+// Cargar producto para edición preservando identificadores y buffer multimedia
+window.editProduct = function (id) {
+  const products = loadProducts();
+  const p = products.find((x) => String(x.id) === String(id));
+  if (!p) {
+    showToast("Error: No se encontró la prenda en la base de datos.", "error");
     return;
   }
 
-  const priceReg = Number(document.getElementById("prod-price").value);
+  // Fijación obligatoria del identificador en memoria y en el DOM
+  editingId = String(p.id);
+  const hiddenIdInput = document.getElementById("product-id");
+  if (hiddenIdInput) {
+    hiddenIdInput.value = editingId;
+  }
+
+  // Asignación de datos al formulario
+  document.getElementById("crud-modal-title").innerText = "Editar Prenda Existente";
+  document.getElementById("prod-name").value = p.name || "";
+  document.getElementById("prod-desc").value = p.description || "";
+  
+  const mainCat = p.category || "hombre";
+  document.getElementById("prod-category").value = mainCat;
+  updateSubcategoryOptions(mainCat, p.subCategory);
+
+  const featuredCheck = document.getElementById("prod-is-featured");
+  if (featuredCheck) {
+    featuredCheck.checked = Boolean(p.isFeatured);
+  }
+
+  document.getElementById("prod-price").value = p.priceRegular || 0;
+
+  // Lógica reactiva de oferta y porcentaje
+  const offerToggle = document.getElementById("prod-is-offer");
+  offerToggle.checked = Boolean(p.isOffer);
+  if (p.isOffer && p.priceRegular > 0) {
+    document.getElementById("offer-controls").classList.remove("hidden");
+    const percent = Math.max(1, Math.round((1 - (p.priceOffer || p.priceRegular) / p.priceRegular) * 100));
+    document.getElementById("prod-discount").value = percent;
+    calculateOfferPrice();
+  } else {
+    document.getElementById("offer-controls").classList.add("hidden");
+  }
+
+  // Clonación profunda de variantes para evitar mutaciones directas en memoria
+  currentVariants = Array.isArray(p.variants) ? JSON.parse(JSON.stringify(p.variants)) : [];
+  renderVariantsList();
+
+  // Restauración de recursos multimedia en el buffer temporal
+  const fallbackImages = Array.isArray(p.media?.images) && p.media.images.length > 0
+    ? [...p.media.images]
+    : (p.imageUrl ? [p.imageUrl] : []);
+
+  mediaBuffer = {
+    images: [...fallbackImages],
+    video: p.media?.video || ""
+  };
+
+  renderMediaPreviews();
+  initMediaDropZone();
+
+  // Apertura controlada de la interfaz modal
+  modal.classList.remove("hidden");
+  setTimeout(() => modal.classList.remove("opacity-0"), 10);
+};
+
+// Procesamiento atómico del formulario: Actualización estricta vs Creación
+form.addEventListener("submit", (e) => {
+  e.preventDefault();
+
+  if (!currentVariants || currentVariants.length === 0) {
+    showToast("Debes registrar al menos una variante de talle/stock.", "error");
+    return;
+  }
+
+  const priceReg = Math.abs(Number(document.getElementById("prod-price").value)) || 0;
   const isOffer = document.getElementById("prod-is-offer").checked;
-  const discount = Number(document.getElementById("prod-discount").value);
+  const discount = Number(document.getElementById("prod-discount").value) || 0;
   const priceOff = isOffer ? Math.round(priceReg * (1 - discount / 100)) : priceReg;
-  const targetId = editingId || document.getElementById("product-id")?.value;
+  
+  // Resolución determinante del ID de registro
+  const hiddenIdVal = document.getElementById("product-id")?.value;
+  const resolvedTargetId = editingId ? String(editingId) : (hiddenIdVal ? String(hiddenIdVal) : null);
 
   let products = loadProducts();
-  const existingProduct = targetId ? products.find((p) => p.id === targetId) : null;
+  const existingProductIndex = resolvedTargetId ? products.findIndex((p) => String(p.id) === resolvedTargetId) : -1;
+  const existingProduct = existingProductIndex > -1 ? products[existingProductIndex] : null;
 
-  // Si no se cargaron fotos nuevas, mantenemos las que ya estaban
+  // Consolidación de multimedia: conservar previas si no hay nuevas
   let finalImages = [];
-  if (mediaBuffer.images.length > 0) {
+  if (mediaBuffer.images && mediaBuffer.images.length > 0) {
     finalImages = [...mediaBuffer.images];
-  } else if (existingProduct?.media?.images?.length > 0) {
+  } else if (existingProduct?.media?.images && existingProduct.media.images.length > 0) {
     finalImages = [...existingProduct.media.images];
   } else if (existingProduct?.imageUrl) {
     finalImages = [existingProduct.imageUrl];
@@ -978,33 +1101,39 @@ form.addEventListener("submit", (e) => {
     finalImages = ["https://images.unsplash.com/photo-1581636625402-29f2a01222ce"];
   }
 
-  const finalVideo = mediaBuffer.video || existingProduct?.media?.video || "";
+  const finalVideo = mediaBuffer.video !== "" ? mediaBuffer.video : (existingProduct?.media?.video || "");
 
-  // Verificamos stock físico en las variantes actuales
+  // Sumatoria física del stock declarado
   let totalStock = 0;
   currentVariants.forEach((v) => {
     v.sizes?.forEach((s) => (totalStock += Number(s.stock) || 0));
   });
 
-  // Conservamos el estado previo de disponibilidad si estamos editando
-  const preservedAvailable = existingProduct ? existingProduct.isAvailable !== false && totalStock > 0 : totalStock > 0;
-  const preservedStatus = existingProduct ? (totalStock > 0 && existingProduct.status !== "agotado" ? "disponible" : "agotado") : (totalStock > 0 ? "disponible" : "agotado");
+  // Preservación estricta de estado de stock y apagador de producto
+  const preservedAvailable = existingProduct
+    ? (existingProduct.isAvailable !== false && totalStock > 0)
+    : (totalStock > 0);
+
+  const preservedStatus = existingProduct
+    ? (totalStock > 0 && existingProduct.status !== "agotado" ? "disponible" : "agotado")
+    : (totalStock > 0 ? "disponible" : "agotado");
 
   const selectedCat = document.getElementById("prod-category").value;
   const selectedSubCat = document.getElementById("prod-subcategory")?.value || "Camisetas";
   const isFeaturedTrend = document.getElementById("prod-is-featured")?.checked || false;
 
-  // Si se marca esta prenda como destacada, se apaga la marca en todos los demás productos
+  // Unicidad de producto destacado: apagar flag en los demás si este está activo
   if (isFeaturedTrend) {
     products.forEach((prod) => {
-      if (prod.id !== targetId) {
+      if (String(prod.id) !== resolvedTargetId) {
         prod.isFeatured = false;
       }
     });
   }
 
+  // Construcción del DTO sanitizado
   const productData = {
-    id: targetId ? targetId : "wz-" + Date.now(),
+    id: resolvedTargetId ? resolvedTargetId : "wz-" + Date.now(),
     name: sanitizeInput(document.getElementById("prod-name").value),
     description: sanitizeInput(document.getElementById("prod-desc").value),
     category: selectedCat,
@@ -1014,8 +1143,6 @@ form.addEventListener("submit", (e) => {
       images: finalImages,
       video: finalVideo,
     },
-
-
     imageUrl: finalImages[0],
     priceRegular: priceReg,
     isOffer: isOffer,
@@ -1025,90 +1152,26 @@ form.addEventListener("submit", (e) => {
     variants: currentVariants,
   };
 
-  if (targetId) {
-    const index = products.findIndex((p) => p.id === targetId);
-    if (index > -1) {
-      products[index] = { ...products[index], ...productData };
-    } else {
-      products.push(productData);
-    }
+  // Mutación en el array en memoria
+  if (existingProductIndex > -1) {
+    products[existingProductIndex] = { ...products[existingProductIndex], ...productData };
+    showToast("Prenda actualizada correctamente.");
   } else {
     products.push(productData);
+    showToast("Nueva prenda ingresada al catálogo.");
   }
 
-  // Guardamos cambios y limpiamos las banderas de edición
+  // Persistencia y reseteo absoluto de variables de estado
   saveProducts(products);
   editingId = null;
-  const hiddenIdInput = document.getElementById("product-id");
-  if (hiddenIdInput) hiddenIdInput.value = "";
+  const hiddenInput = document.getElementById("product-id");
+  if (hiddenInput) hiddenInput.value = "";
 
   closeModal();
   mediaBuffer = { images: [], video: "" };
   renderMediaPreviews();
   renderInventoryTable();
 });
-
-
-
-// Cargar producto para editar protegiendo la carga multimedia y el id
-window.editProduct = function (id) {
-  const products = loadProducts();
-  const p = products.find((x) => x.id === id);
-  if (!p) return;
-
-  // Guardamos el id global y en el campo oculto
-  editingId = p.id;
-  const hiddenIdInput = document.getElementById("product-id");
-  if (hiddenIdInput) hiddenIdInput.value = p.id;
-
-  // Llenamos campos de texto básicos y taxonomía
-  document.getElementById("crud-modal-title").innerText = "Editar Prenda";
-  document.getElementById("prod-name").value = p.name || "";
-  document.getElementById("prod-desc").value = p.description || "";
-  
-  const mainCat = p.category || "hombre";
-  document.getElementById("prod-category").value = mainCat;
-  updateSubcategoryOptions(mainCat, p.subCategory);
-
-  // Restaurar estado de prenda destacada de moda
-  const featuredCheck = document.getElementById("prod-is-featured");
-  if (featuredCheck) featuredCheck.checked = Boolean(p.isFeatured);
-
-  document.getElementById("prod-price").value = p.priceRegular || 0;
-
-  // Manejamos el switch y slider de descuentos
-  const offerToggle = document.getElementById("prod-is-offer");
-  offerToggle.checked = Boolean(p.isOffer);
-  if (p.isOffer && p.priceRegular > 0) {
-    document.getElementById("offer-controls").classList.remove("hidden");
-    const percent = Math.round((1 - (p.priceOffer || p.priceRegular) / p.priceRegular) * 100);
-    document.getElementById("prod-discount").value = percent;
-    calculateOfferPrice();
-  } else {
-    document.getElementById("offer-controls").classList.add("hidden");
-  }
-
-  // Clonamos variantes para no alterar la memoria antes de confirmar
-  currentVariants = JSON.parse(JSON.stringify(p.variants || []));
-  renderVariantsList();
-
-  // Rescatamos fotos y video sin depender de inputs inexistentes
-  const fallbackImages = p.media?.images && p.media.images.length > 0
-    ? [...p.media.images]
-    : (p.imageUrl ? [p.imageUrl] : []);
-
-  mediaBuffer = {
-    images: fallbackImages,
-    video: p.media?.video || ""
-  };
-
-  renderMediaPreviews();
-  initMediaDropZone();
-
-  // Mostramos el modal de forma limpia
-  modal.classList.remove("hidden");
-  setTimeout(() => modal.classList.remove("opacity-0"), 10);
-};
 
 
 

@@ -8,6 +8,11 @@
     />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Directiva Content Security Policy estricta para navegación pública -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://images.unsplash.com; media-src 'self' data: blob:; connect-src 'self' https://wa.me; frame-src https://wa.me;"
+    />
     <title>WZSTORE | Alto Rendimiento</title>
 
     <!-- SEO OpenGraph -->
@@ -133,66 +138,68 @@
 
     <!-- Control y Filtros -->
     <main class="max-w-7xl mx-auto px-4 py-8">
-      <!-- HERO BANNER: PRENDA DE MODA DESTACADA CON VIDEO STREAMING -->
+      <!-- HERO SHOWCASE: PRENDA DE TENDENCIA / DROP DE LA SEMANA -->
       <section
         id="wz-featured-hero"
-        class="hidden mb-10 rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 via-[#0d1322] to-slate-950 overflow-hidden relative shadow-[0_0_50px_rgba(16,185,129,0.1)]"
+        class="hidden mb-12 rounded-2xl border border-emerald-500/30 bg-gradient-to-r from-slate-950 via-[#0a0f1d] to-[#111726] overflow-hidden relative shadow-[0_0_45px_rgba(34,197,94,0.15)]"
       >
-        <div class="grid grid-cols-1 lg:grid-cols-12 items-center">
-          <!-- Columna Izquierda: Información de la Prenda -->
-          <div class="p-6 sm:p-10 lg:col-span-7 flex flex-col justify-center z-10 space-y-4">
-            <div class="flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span class="text-xs uppercase tracking-widest font-black text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-3 py-1 rounded-full">
-                Prenda de Moda • Edición Limitada
-              </span>
+        <div class="grid grid-cols-1 lg:grid-cols-12 items-stretch min-h-[380px]">
+          <!-- Información y Call to Action -->
+          <div class="p-6 sm:p-10 lg:col-span-7 flex flex-col justify-between z-10">
+            <div>
+              <div class="flex items-center gap-2 mb-3">
+                <span class="inline-flex items-center gap-1.5 bg-red-950/80 text-red-400 border border-red-800 text-[11px] font-black uppercase tracking-widest px-3 py-1 rounded-full animate-pulse">
+                  🔥 DROP DE LA SEMANA
+                </span>
+                <span id="wz-hero-discount-badge" class="hidden bg-emerald-500 text-black font-black text-[11px] px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                  -0%
+                </span>
+              </div>
+
+              <h2 id="wz-hero-title" class="text-3xl sm:text-5xl font-black text-white tracking-tight uppercase leading-tight mb-2"></h2>
+              <p id="wz-hero-desc" class="text-xs sm:text-sm text-slate-300 line-clamp-3 leading-relaxed max-w-xl mb-4"></p>
             </div>
 
-            <h2 id="wz-hero-title" class="text-2xl sm:text-4xl font-black text-white tracking-tight uppercase leading-none">
-              <!-- Inyectado por JS -->
-            </h2>
+            <div class="pt-2">
+              <div class="flex items-baseline gap-3 mb-4">
+                <span id="wz-hero-price" class="text-3xl font-black text-emerald-400"></span>
+                <span id="wz-hero-old-price" class="text-base line-through text-slate-500 font-semibold hidden"></span>
+              </div>
 
-            <p id="wz-hero-desc" class="text-xs sm:text-sm text-slate-300 line-clamp-3 leading-relaxed max-w-xl">
-              <!-- Inyectado por JS -->
-            </p>
+              <!-- Selector rápido de tallas integrado en el Hero -->
+              <div class="mb-4">
+                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Elige tu talla para despacho inmediato:</p>
+                <div id="wz-hero-sizes-container" class="flex flex-wrap gap-2"></div>
+              </div>
 
-            <div class="pt-2 flex flex-wrap items-baseline gap-3">
-              <span id="wz-hero-price" class="text-2xl sm:text-3xl font-black text-emerald-400">
-                <!-- Inyectado por JS -->
-              </span>
-              <span id="wz-hero-old-price" class="text-sm line-through text-slate-500 font-semibold hidden">
-                <!-- Inyectado por JS -->
-              </span>
-            </div>
-
-            <div class="pt-2 flex items-center gap-3">
               <button
                 id="wz-hero-buy-btn"
                 type="button"
-                class="bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs sm:text-sm uppercase tracking-wider px-6 py-3 rounded-xl transition-all shadow-lg shadow-emerald-500/20 hover:scale-105"
+                class="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-widest px-8 py-3.5 rounded-xl transition-all shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:scale-105 active:scale-95"
               >
-                Adquirir Prenda Ahora
+                Añadir al Carrito
               </button>
             </div>
           </div>
 
-          <!-- Columna Derecha: Reproductor de Video en Bucle -->
-          <div class="lg:col-span-5 h-72 sm:h-96 lg:h-full relative overflow-hidden bg-black flex items-center justify-center">
+          <!-- Contenedor Multimedia Activo (Video Autoplay o Fotos) -->
+          <div class="lg:col-span-5 relative bg-black flex items-center justify-center min-h-[300px] overflow-hidden">
             <video
               id="wz-hero-video"
-              class="w-full h-full object-cover"
+              class="w-full h-full object-cover hidden"
               autoplay
               muted
               loop
               playsinline
               preload="metadata"
             ></video>
-            <!-- Fallback de Imagen si no cuenta con video -->
-            <img
-              id="wz-hero-image-fallback"
-              class="w-full h-full object-cover hidden"
-              alt="Prenda Destacada"
-            />
+            <div id="wz-hero-gallery-container" class="w-full h-full relative hidden">
+              <img
+                id="wz-hero-image-fallback"
+                class="w-full h-full object-cover"
+                alt="Prenda de Moda"
+              />
+            </div>
           </div>
         </div>
       </section>

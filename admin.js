@@ -282,20 +282,33 @@ window.confirmDelete = function (id) {
 };
 
 // Alternar disponibilidad (Simular Agotado visualmente sin borrar stock real)
+// Alternar disponibilidad (Máquina de estados: respalda y restaura inventario real)
 window.toggleProductStatus = function(id) {
   let products = loadProducts();
   const index = products.findIndex(p => p.id === id);
   
   if (index > -1) {
     const target = products[index];
-    const newStatus = target.status === "agotado" ? "disponible" : "agotado";
+    const isCurrentlyAgotado = target.status === "agotado";
+    const newStatus = isCurrentlyAgotado ? "disponible" : "agotado";
     target.status = newStatus;
     
-    // Mutación estricta de inventario en todas las variantes
     if (newStatus === "agotado") {
-      target.variants.forEach(variant => {
-        variant.sizes.forEach(sizeObj => {
+      // Guarda respaldo del stock actual y pasa a 0
+      target.variants?.forEach(variant => {
+        variant.sizes?.forEach(sizeObj => {
+          const current = Number(sizeObj.stock) || 0;
+          sizeObj.previousStock = current > 0 ? current : (Number(sizeObj.previousStock) || 1);
           sizeObj.stock = 0;
+        });
+      });
+    } else {
+      // Restaura el stock original guardado en el respaldo
+      target.variants?.forEach(variant => {
+        variant.sizes?.forEach(sizeObj => {
+          const restored = Number(sizeObj.previousStock);
+          sizeObj.stock = (!isNaN(restored) && restored > 0) ? restored : 1;
+          delete sizeObj.previousStock;
         });
       });
     }

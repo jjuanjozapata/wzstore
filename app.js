@@ -89,12 +89,14 @@ const executeMasterFilters = () => {
     result = result.filter((p) => p.name.toLowerCase().includes(currentFilter.text));
   }
 
-  // Filtro de categoría principal
+  // Filtro de categoría y subcategoría taxonómica sincronizado con el admin
   if (currentFilter.category && currentFilter.category !== "all") {
+    const filterCat = currentFilter.category.toLowerCase();
     result = result.filter((p) => {
-      const catMatch = p.category?.toLowerCase() === currentFilter.category.toLowerCase();
-      const nameMatch = p.name?.toLowerCase().includes(currentFilter.category.toLowerCase());
-      return catMatch || nameMatch;
+      const mainMatch = p.category?.toLowerCase() === filterCat;
+      const subMatch = p.subCategory?.toLowerCase() === filterCat;
+      const nameMatch = p.name?.toLowerCase().includes(filterCat);
+      return mainMatch || subMatch || nameMatch;
     });
   }
 
@@ -150,6 +152,7 @@ const initApp = () => {
   });
 
   renderSkeleton();
+  renderFeaturedHero();
   setTimeout(() => renderCatalog(), 600); // LCP optimization simulation
   updateCartUI();
 };
@@ -238,17 +241,66 @@ const setupEventListeners = () => {
   if (finalBuyBtn) finalBuyBtn.addEventListener("click", processCheckout);
 };
 
-// Renderizado Catálogo
-const renderSkeleton = () => {
-  const grid = document.getElementById("catalog-grid");
-  grid.innerHTML = Array(8)
-    .fill()
-    .map(
-      () => `
-    <div class="bg-[#111726] border border-[#1e293b] rounded-xl p-4 h-96 skeleton-box"></div>
-  `,
-    )
-    .join("");
+// Renderizado del Hero de Prenda de Moda Destacada con Video Streaming
+const renderFeaturedHero = () => {
+  const heroSection = document.getElementById("wz-featured-hero");
+  if (!heroSection) return;
+
+  // Buscar prenda marcada como destacada o fallback a la que tenga video disponible
+  const featuredProduct = products.find((p) => p.isFeatured && (p.media?.video || p.imageUrl || p.media?.images?.[0])) 
+    || products.find((p) => p.media?.video);
+
+  if (!featuredProduct) {
+    heroSection.classList.add("hidden");
+    return;
+  }
+
+  const titleEl = document.getElementById("wz-hero-title");
+  const descEl = document.getElementById("wz-hero-desc");
+  const priceEl = document.getElementById("wz-hero-price");
+  const oldPriceEl = document.getElementById("wz-hero-old-price");
+  const videoEl = document.getElementById("wz-hero-video");
+  const imgFallback = document.getElementById("wz-hero-image-fallback");
+  const buyBtn = document.getElementById("wz-hero-buy-btn");
+
+  const finalPrice = featuredProduct.isOffer ? featuredProduct.priceOffer : featuredProduct.priceRegular;
+
+  if (titleEl) titleEl.textContent = featuredProduct.name;
+  if (descEl) descEl.textContent = featuredProduct.description;
+  if (priceEl) priceEl.textContent = `$${finalPrice.toLocaleString("es-CO")} COP`;
+
+  if (featuredProduct.isOffer && oldPriceEl) {
+    oldPriceEl.textContent = `$${featuredProduct.priceRegular.toLocaleString("es-CO")} COP`;
+    oldPriceEl.classList.remove("hidden");
+  } else if (oldPriceEl) {
+    oldPriceEl.classList.add("hidden");
+  }
+
+  // Carga reactiva de multimedia: video prioritario o foto
+  if (featuredProduct.media?.video && videoEl) {
+    videoEl.src = featuredProduct.media.video;
+    videoEl.classList.remove("hidden");
+    if (imgFallback) imgFallback.classList.add("hidden");
+    videoEl.play().catch(() => {});
+  } else if (imgFallback) {
+    imgFallback.src = featuredProduct.imageUrl || featuredProduct.media?.images?.[0];
+    imgFallback.classList.remove("hidden");
+    if (videoEl) videoEl.classList.add("hidden");
+  }
+
+  // Acción de compra directa asegurando selección de variante
+  if (buyBtn) {
+    buyBtn.onclick = () => {
+      // Auto-seleccionar primera variante disponible si no se ha escogido
+      const state = uiState[featuredProduct.id];
+      if (state && state.sizeIdx === null) {
+        state.sizeIdx = 0;
+      }
+      window.addToCart(featuredProduct.id);
+    };
+  }
+
+  heroSection.classList.remove("hidden");
 };
 
 // Renderizado reactivo del catálogo aceptando lista calculada

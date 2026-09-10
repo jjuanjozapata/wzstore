@@ -21,49 +21,295 @@ const sanitizeInput = (str) => {
   }).trim();
 };
 
-const AUTH_USER = "juan";
-const AUTH_PASS = "juan1234";
+// Constantes del motor de autenticación multiusuario
+const USERS_STORAGE_KEY = "wz_auth_users";
 const SESSION_KEY = "wz_admin_session";
-const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutos
+const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutos de inactividad
 
+// Utilidad centralizada de notificaciones Toast no intrusivas
+const showToast = (message, type = "success") => {
+  const container = document.getElementById("wz-toast-container");
+  if (!container) return;
+
+  const toast = document.createElement("div");
+  const bgColor = type === "success" ? "bg-slate-900 border-emerald-500 text-emerald-400" : "bg-slate-900 border-red-500 text-red-400";
+  toast.className = `border px-4 py-3 rounded-xl shadow-2xl text-xs font-semibold flex items-center gap-2 transform transition-all duration-300 pointer-events-auto ${bgColor}`;
+  toast.innerHTML = `
+    <span class="w-2 h-2 rounded-full ${type === "success" ? "bg-emerald-400 animate-pulse" : "bg-red-400"}"></span>
+    <span>${message}</span>
+  `;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add("opacity-0", "translate-y-2");
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+};
+
+// Inicialización de la base de usuarios en almacenamiento local
+const initializeUsersStore = () => {
+  const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
+  if (!storedUsers) {
+    const defaultAccounts = [
+      { username: "juan", password: "juan1234", role: "admin", createdAt: Date.now() },
+      { username: "monitor", password: "wzmonitor2026", role: "worker", createdAt: Date.now() }
+    ];
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(defaultAccounts));
+    return defaultAccounts;
+  }
+  try {
+    return JSON.parse(storedUsers);
+  } catch (err) {
+    console.error("Error al analizar base de usuarios:", err);
+    return [];
+  }
+};
+
+const getStoredUsers = () => {
+  return JSON.parse(localStorage.getItem(USERS_STORAGE_KEY)) || initializeUsersStore();
+};
+
+const saveStoredUsers = (usersList) => {
+  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(usersList));
+};
+
+const getCurrentSession = () => {
+  try {
+    return JSON.parse(sessionStorage.getItem(SESSION_KEY));
+  } catch {
+    return null;
+  }
+};
+
+// Aplicación de directivas de seguridad basadas en roles (RBAC)
+const applyRolePermissions = () => {
+  const session = getCurrentSession();
+  if (!session) return;
+
+  const isMasterAdmin = session.role === "admin";
+  const roleBadge = document.getElementById("wz-current-role-badge");
+  const usersBtn = document.getElementById("wz-open-users-btn");
+  const analyticsSection = document.querySelector("section:has(#kpi-revenue)") || document.querySelector("main section:first-of-type");
+
+  if (roleBadge) {
+    roleBadge.textContent = isMasterAdmin ? "Rol: Administrador Total" : "Rol: Trabajador / Monitor";
+    roleBadge.className = isMasterAdmin
+      ? "text-xs px-2.5 py-1 rounded-full font-bold bg-slate-800 text-emerald-400 border border-emerald-500/30 uppercase"
+      : "text-xs px-2.5 py-1 rounded-full font-bold bg-slate-800 text-amber-400 border border-amber-500/30 uppercase";
+  }
+
+  // Visualización del botón de gestión de usuarios
+  if (usersBtn) {
+    if (isMasterAdmin) {
+      usersBtn.classList.remove("hidden");
+    } else {
+      usersBtn.classList.add("hidden");
+    }
+  }
+
+  // Ocultar sección analítica completa a perfiles restringidos
+  if (analyticsSection) {
+    if (!isMasterAdmin) {
+      analyticsSection.classList.add("hidden");
+    } else {
+      analyticsSection.classList.remove("hidden");
+    }
+  }
+
+  // Re-renderizar inventario para ajustar botones de eliminación según permisos
+  renderInventoryTable();
+};
+
+// Verificación y mantenimiento del estado de sesión
 function checkAuth() {
-  const sessionData = JSON.parse(sessionStorage.getItem(SESSION_KEY));
+  const sessionData = getCurrentSession();
   const now = Date.now();
 
   if (!sessionData || now - sessionData.timestamp > SESSION_TIMEOUT) {
-    // Bloquear vista, mostrar login
     document.getElementById("login-modal").classList.remove("hidden");
     document.getElementById("admin-dashboard").classList.add("hidden");
     sessionStorage.removeItem(SESSION_KEY);
-
-    // Redirigir si se intenta forzar por URL (opcional, aquí bloqueamos visualmente)
-    // window.location.href = 'index.html';
   } else {
-    // Renovar token y mostrar dashboard
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ timestamp: now }));
+    // Renovar marca de tiempo de actividad
+    sessionData.timestamp = now;
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
     document.getElementById("login-modal").classList.add("hidden");
     document.getElementById("admin-dashboard").classList.remove("hidden");
     initDashboard();
+    applyRolePermissions();
   }
 }
 
-// Evento de Login
+// Validación de credenciales en formulario de Login
 document.getElementById("login-form").addEventListener("submit", (e) => {
   e.preventDefault();
-  const u = document.getElementById("username").value;
+  const u = document.getElementById("username").value.trim().toLowerCase();
   const p = document.getElementById("password").value;
 
-  if (u === AUTH_USER && p === AUTH_PASS) {
+  const users = getStoredUsers();
+  const matchedUser = users.find((user) => user.username.toLowerCase() === u && user.password === p);
+
+  if (matchedUser) {
     sessionStorage.setItem(
       SESSION_KEY,
-      JSON.stringify({ timestamp: Date.now() }),
+      JSON.stringify({
+        username: matchedUser.username,
+        role: matchedUser.role,
+        timestamp: Date.now()
+      })
     );
     document.getElementById("login-error").classList.add("hidden");
+    document.getElementById("username").value = "";
+    document.getElementById("password").value = "";
     checkAuth();
   } else {
     document.getElementById("login-error").classList.remove("hidden");
   }
 });
+
+// Controladores para Modal de Cambio de Contraseña
+const pwdModal = document.getElementById("wz-password-modal");
+const openPwdBtn = document.getElementById("wz-open-password-btn");
+const closePwdBtn = document.getElementById("wz-close-password-btn");
+const cancelPwdBtn = document.getElementById("wz-cancel-password-btn");
+const pwdForm = document.getElementById("wz-password-form");
+
+const closePasswordModal = () => {
+  if (pwdModal) pwdModal.classList.add("hidden");
+  if (pwdForm) pwdForm.reset();
+};
+
+if (openPwdBtn) {
+  openPwdBtn.addEventListener("click", () => {
+    if (pwdModal) pwdModal.classList.remove("hidden");
+  });
+}
+if (closePwdBtn) closePwdBtn.addEventListener("click", closePasswordModal);
+if (cancelPwdBtn) cancelPwdBtn.addEventListener("click", closePasswordModal);
+
+if (pwdForm) {
+  pwdForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const currPass = document.getElementById("wz-pwd-current").value;
+    const newPass = document.getElementById("wz-pwd-new").value;
+    const confirmPass = document.getElementById("wz-pwd-confirm").value;
+    const session = getCurrentSession();
+
+    if (!session) return;
+
+    const users = getStoredUsers();
+    const userIndex = users.findIndex((u) => u.username.toLowerCase() === session.username.toLowerCase());
+
+    if (userIndex === -1 || users[userIndex].password !== currPass) {
+      showToast("La contraseña actual no coincide.", "error");
+      return;
+    }
+
+    if (newPass.length < 6) {
+      showToast("La nueva clave debe tener al menos 6 caracteres.", "error");
+      return;
+    }
+
+    if (newPass !== confirmPass) {
+      showToast("Las contraseñas nuevas no coinciden entre sí.", "error");
+      return;
+    }
+
+    users[userIndex].password = newPass;
+    saveStoredUsers(users);
+    closePasswordModal();
+    showToast("Contraseña actualizada exitosamente.");
+  });
+}
+
+// Controladores y Render para Modal de Gestión de Usuarios
+const usersModal = document.getElementById("wz-users-modal");
+const openUsersBtn = document.getElementById("wz-open-users-btn");
+const closeUsersBtn = document.getElementById("wz-close-users-btn");
+const createUserForm = document.getElementById("wz-create-user-form");
+
+const renderUsersTable = () => {
+  const tbody = document.getElementById("wz-users-table-body");
+  if (!tbody) return;
+
+  const users = getStoredUsers();
+  const session = getCurrentSession();
+
+  tbody.innerHTML = users
+    .map((u) => {
+      const isCurrent = session?.username?.toLowerCase() === u.username.toLowerCase();
+      const badgeColor = u.role === "admin" ? "text-emerald-400 bg-emerald-950/40 border border-emerald-800" : "text-amber-400 bg-amber-950/40 border border-amber-800";
+      return `
+        <tr class="hover:bg-dark transition-colors">
+          <td class="p-3 font-semibold text-white flex items-center gap-2">
+            <span>${u.username}</span>
+            ${isCurrent ? '<span class="text-[10px] text-gray-500 font-normal">(Sesión actual)</span>' : ""}
+          </td>
+          <td class="p-3">
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded uppercase ${badgeColor}">${u.role === "admin" ? "Administrador" : "Trabajador"}</span>
+          </td>
+          <td class="p-3 text-right">
+            ${
+              !isCurrent
+                ? `<button type="button" onclick="deleteUserAccount('${u.username}')" class="text-red-400 hover:text-red-300 font-bold">Eliminar</button>`
+                : '<span class="text-gray-600">-</span>'
+            }
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+};
+
+window.deleteUserAccount = (usernameToDelete) => {
+  let users = getStoredUsers();
+  users = users.filter((u) => u.username.toLowerCase() !== usernameToDelete.toLowerCase());
+  saveStoredUsers(users);
+  renderUsersTable();
+  showToast(`Usuario "${usernameToDelete}" eliminado.`);
+};
+
+if (openUsersBtn) {
+  openUsersBtn.addEventListener("click", () => {
+    if (usersModal) {
+      renderUsersTable();
+      usersModal.classList.remove("hidden");
+    }
+  });
+}
+
+if (closeUsersBtn) {
+  closeUsersBtn.addEventListener("click", () => {
+    if (usersModal) usersModal.classList.add("hidden");
+  });
+}
+
+if (createUserForm) {
+  createUserForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const newUsername = sanitizeInput(document.getElementById("wz-new-username").value.trim().toLowerCase());
+    const newPassword = document.getElementById("wz-new-password").value;
+    const newRole = document.getElementById("wz-new-role").value;
+
+    const users = getStoredUsers();
+    if (users.some((u) => u.username.toLowerCase() === newUsername)) {
+      showToast("Ese nombre de usuario ya existe.", "error");
+      return;
+    }
+
+    users.push({
+      username: newUsername,
+      password: newPassword,
+      role: newRole,
+      createdAt: Date.now()
+    });
+
+    saveStoredUsers(users);
+    createUserForm.reset();
+    renderUsersTable();
+    showToast(`Usuario "${newUsername}" registrado.`);
+  });
+}
 
 // Evento de Logout
 document.getElementById("logout-btn").addEventListener("click", () => {
@@ -246,7 +492,11 @@ function renderInventoryTable() {
                 </td>
                 <td class="p-4 text-right space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onclick="editProduct('${p.id}')" class="text-blue-400 hover:text-blue-300 text-sm font-medium">Editar</button>
-                    <button id="del-btn-${p.id}" onclick="confirmDelete('${p.id}')" class="text-red-500 hover:text-red-400 text-sm font-medium">Eliminar</button>
+                    ${
+                      (getCurrentSession()?.role === "admin")
+                        ? `<button id="del-btn-${p.id}" onclick="confirmDelete('${p.id}')" class="text-red-500 hover:text-red-400 text-sm font-medium">Eliminar</button>`
+                        : `<span class="text-xs text-gray-600 cursor-not-allowed" title="Requiere rol de Administrador">Bloqueado</span>`
+                    }
                 </td>
             </tr>
         `;
@@ -555,8 +805,11 @@ document.getElementById("open-crud-btn").addEventListener("click", () => {
   mediaBuffer = { images: [], video: "" };
   renderMediaPreviews();
   initMediaDropZone();
-  document.getElementById("crud-modal-title").innerText = "Añadir Nueva Prenda";
+ document.getElementById("crud-modal-title").innerText = "Añadir Nueva Prenda";
   document.getElementById("offer-controls").classList.add("hidden");
+  updateSubcategoryOptions(document.getElementById("prod-category").value);
+  const featuredCheck = document.getElementById("prod-is-featured");
+  if (featuredCheck) featuredCheck.checked = false;
   renderVariantsList();
 
   modal.classList.remove("hidden");
@@ -574,7 +827,30 @@ function closeModal() {
 }
 
 // Calculadora de Descuento en tiempo real
-const priceInput = document.getElementById("prod-price");
+// Diccionario taxonómico de prendas para filtrado en cascada
+const TAXONOMY_MAP = {
+  hombre: ["Camisetas", "Bermudas", "Busos", "Conjuntos", "Licras", "Chaquetas", "Calzado"],
+  mujer: ["Camisetas", "Licras", "Tops", "Bermudas", "Busos", "Conjuntos", "Chaquetas", "Calzado"],
+  accesorios: ["Mochilas", "Guantes", "Gorras", "Termos", "Cinturones", "Otros"]
+};
+
+// Actualización reactiva del selector dependiente de prendas
+const updateSubcategoryOptions = (selectedMainCat, preselectedSub = null) => {
+  const subSelect = document.getElementById("prod-subcategory");
+  if (!subSelect) return;
+
+  const validItems = TAXONOMY_MAP[selectedMainCat] || TAXONOMY_MAP["hombre"];
+  subSelect.innerHTML = validItems
+    .map((item) => `<option value="${item}" ${preselectedSub === item ? "selected" : ""}>${item}</option>`)
+    .join("");
+};
+
+const catSelectEl = document.getElementById("prod-category");
+if (catSelectEl) {
+  catSelectEl.addEventListener("change", (e) => {
+    updateSubcategoryOptions(e.target.value);
+  });
+}
 const offerToggle = document.getElementById("prod-is-offer");
 const discountSlider = document.getElementById("prod-discount");
 
@@ -714,15 +990,32 @@ form.addEventListener("submit", (e) => {
   const preservedAvailable = existingProduct ? existingProduct.isAvailable !== false && totalStock > 0 : totalStock > 0;
   const preservedStatus = existingProduct ? (totalStock > 0 && existingProduct.status !== "agotado" ? "disponible" : "agotado") : (totalStock > 0 ? "disponible" : "agotado");
 
+  const selectedCat = document.getElementById("prod-category").value;
+  const selectedSubCat = document.getElementById("prod-subcategory")?.value || "Camisetas";
+  const isFeaturedTrend = document.getElementById("prod-is-featured")?.checked || false;
+
+  // Si se marca esta prenda como destacada, se apaga la marca en todos los demás productos
+  if (isFeaturedTrend) {
+    products.forEach((prod) => {
+      if (prod.id !== targetId) {
+        prod.isFeatured = false;
+      }
+    });
+  }
+
   const productData = {
     id: targetId ? targetId : "wz-" + Date.now(),
     name: sanitizeInput(document.getElementById("prod-name").value),
     description: sanitizeInput(document.getElementById("prod-desc").value),
-    category: document.getElementById("prod-category").value,
+    category: selectedCat,
+    subCategory: selectedSubCat,
+    isFeatured: isFeaturedTrend,
     media: {
       images: finalImages,
       video: finalVideo,
     },
+
+
     imageUrl: finalImages[0],
     priceRegular: priceReg,
     isOffer: isOffer,
@@ -768,11 +1061,19 @@ window.editProduct = function (id) {
   const hiddenIdInput = document.getElementById("product-id");
   if (hiddenIdInput) hiddenIdInput.value = p.id;
 
-  // Llenamos campos de texto básicos
+  // Llenamos campos de texto básicos y taxonomía
   document.getElementById("crud-modal-title").innerText = "Editar Prenda";
   document.getElementById("prod-name").value = p.name || "";
   document.getElementById("prod-desc").value = p.description || "";
-  document.getElementById("prod-category").value = p.category || "hombre";
+  
+  const mainCat = p.category || "hombre";
+  document.getElementById("prod-category").value = mainCat;
+  updateSubcategoryOptions(mainCat, p.subCategory);
+
+  // Restaurar estado de prenda destacada de moda
+  const featuredCheck = document.getElementById("prod-is-featured");
+  if (featuredCheck) featuredCheck.checked = Boolean(p.isFeatured);
+
   document.getElementById("prod-price").value = p.priceRegular || 0;
 
   // Manejamos el switch y slider de descuentos

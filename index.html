@@ -1,7 +1,12 @@
 <!doctype html>
 <html lang="es">
   <head>
+    <!-- Favicon Indexable para Google Search (Directrices de Rich Results) -->
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="icon" type="image/png" sizes="48x48" href="logo-48.png" />
+    <link rel="icon" type="image/png" sizes="96x96" href="logo-96.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="logo-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png" />
     <meta
       name="google-site-verification"
       content="Law6arK5Q5MIUwUbNko9dpcTkkXuRr6jEx1Y2-TUDdE"
@@ -33,38 +38,73 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="styles.css" />
 
-    <!-- MARCADO ESTRUCTURADO DINÁMICO JSON-LD PARA GOOGLE -->
+   <!-- MARCADO ESTRUCTURADO DINÁMICO JSON-LD PARA GOOGLE (ORGANIZATION & LOGO RICH RESULTS) -->
     <script id="wz-schema-injector">
       document.addEventListener('DOMContentLoaded', () => {
-        const rawData = localStorage.getItem('wz_core_products');
-        const catalog = rawData ? JSON.parse(rawData) : [];
-             
+        const rawData = localStorage.getItem('wz_core_products') || localStorage.getItem('wz_products');
+        let catalog = [];
+        try {
+          catalog = rawData ? JSON.parse(rawData) : [];
+        } catch (e) {
+          catalog = [];
+        }
+
+        const siteUrl = "https://jjuanjozapata.github.io/wzstore";
+        const logoAbsoluteUrl = "https://jjuanjozapata.github.io/wzstore/favicon.svg";
+
         const schemaData = {
           "@context": "https://schema.org",
           "@graph": [
             {
-              "@type": "ClothingStore",
-              "@id": "https://wzstore.local/#store",
-              "name": "WZSTORE Premium Sportswear",
-              "url": window.location.origin,
-              "priceRange": "$$$",
-              "currenciesAccepted": "COP",
-              "paymentAccepted": "WhatsApp Business Checkout Directo"
+              "@type": "Organization",
+              "@id": `${siteUrl}/#organization`,
+              "name": "WZSTORE",
+              "alternateName": "WZSTORE Colombia",
+              "url": `${siteUrl}/`,
+              "logo": {
+                "@type": "ImageObject",
+                "@id": `${siteUrl}/#logo`,
+                "url": logoAbsoluteUrl,
+                "contentUrl": logoAbsoluteUrl,
+                "caption": "WZSTORE Logo Oficial",
+                "width": "512",
+                "height": "512"
+              },
+              "image": logoAbsoluteUrl,
+              "sameAs": [
+                "https://wa.me/573006724082"
+              ]
             },
-            ...catalog.map(item => ({
+            {
+              "@type": "OnlineStore",
+              "@id": `${siteUrl}/#store`,
+              "name": "WZSTORE Sportswear",
+              "url": `${siteUrl}/`,
+              "parentOrganization": {
+                "@id": `${siteUrl}/#organization`
+              },
+              "priceRange": "$$",
+              "currenciesAccepted": "COP",
+              "paymentAccepted": "Transferencia Bancaria, Pago Contra Entrega, PSE"
+            },
+            ...catalog.map((item) => ({
               "@type": "Product",
+              "@id": `${siteUrl}/#product-${item.id}`,
               "name": item.name,
               "description": item.description,
-              "image": item.imageUrl || item.media?.images?.[0],
+              "image": item.imageUrl || (item.media?.images && item.media.images[0]) || logoAbsoluteUrl,
               "offers": {
                 "@type": "Offer",
                 "priceCurrency": "COP",
                 "price": item.isOffer ? item.priceOffer : item.priceRegular,
-                "availability": item.status === "agotado" ? "https://schema.org/OutOfStock" : "https://schema.org/InStock"
+                "availability": (item.status === "agotado" || item.isAvailable === false)
+                  ? "https://schema.org/OutOfStock"
+                  : "https://schema.org/InStock"
               }
             }))
           ]
         };
+
         const script = document.createElement('script');
         script.type = 'application/ld+json';
         script.text = JSON.stringify(schemaData);

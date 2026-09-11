@@ -490,21 +490,35 @@ let currentVariants = [];
 let editingId = null;
 let mediaBuffer = { images: [], video: "" };
 
+// Unificación de carga de inventario soportando ambas claves de almacenamiento
 function loadProducts() {
-  return JSON.parse(localStorage.getItem("wz_core_products")) || [];
+  const stored = localStorage.getItem("wz_core_products") || localStorage.getItem("wz_products");
+  try {
+    return stored ? JSON.parse(stored) : [];
+  } catch (err) {
+    console.error("Fallo al parsear inventario:", err);
+    return [];
+  }
 }
 
+// Persistencia sincronizada en ambas claves de almacenamiento
 function saveProducts(products) {
-  localStorage.setItem("wz_core_products", JSON.stringify(products));
+  const json = JSON.stringify(products);
+  localStorage.setItem("wz_core_products", json);
+  localStorage.setItem("wz_products", json);
 }
 
+// Renderizado de tabla con atributos data para delegación segura de eventos
 function renderInventoryTable() {
   const products = loadProducts();
   const tbody = document.getElementById("inventory-table-body");
+  if (!tbody) return;
+
   if (products.length === 0) {
     tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500">El catálogo está vacío.</td></tr>`;
     return;
   }
+
   tbody.innerHTML = products
     .map((p) => {
       let totalStock = 0;
@@ -515,42 +529,60 @@ function renderInventoryTable() {
       const statusText = isAvailable
         ? `<span class="text-green-400 font-semibold">${totalStock} unds</span>`
         : `<span class="text-red-500 font-bold">AGOTADO (Apagado)</span>`;
+      
+      const safeId = String(p.id);
+      const displayId = safeId.includes("-") ? safeId.split("-")[1] : safeId;
+
       return `
-            <tr class="hover:bg-dark transition-colors group">
-                <td class="p-4 flex items-center gap-3">
-                    <img src="${p.imageUrl}" class="w-10 h-10 object-cover rounded border border-gray-700">
-                    <div>
-                        <p class="font-bold text-white truncate max-w-[200px]">${p.name}</p>
-                        <p class="text-xs text-gray-500">${p.id.split("-")[1]}</p>
-                    </div>
-                </td>
-                <td class="p-4">
-                    $${p.priceRegular.toLocaleString("es-CO")}
-                    ${p.isOffer ? `<br><span class="text-xs text-neon font-bold">OFERTA: $${p.priceOffer.toLocaleString("es-CO")}</span>` : ""}
-                </td>
-                <td class="p-4 text-gray-300 text-sm">${p.category}</td>
-                <td class="p-4">
-                    <div class="flex items-center gap-2">
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" onchange="toggleProductStatus('${p.id}')" class="sr-only peer" ${isAvailable ? "checked" : ""}>
-                            <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-neon"></div>
-                        </label>
-                        <span class="text-xs">${statusText}</span>
-                    </div>
-                </td>
-                <td class="p-4 text-right space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onclick="editProduct('${p.id}')" class="text-blue-400 hover:text-blue-300 text-sm font-medium">Editar</button>
-                    ${
-                      (getCurrentSession()?.role === "admin")
-                        ? `<button id="del-btn-${p.id}" onclick="confirmDelete('${p.id}')" class="text-red-500 hover:text-red-400 text-sm font-medium">Eliminar</button>`
-                        : `<span class="text-xs text-gray-600 cursor-not-allowed" title="Requiere rol de Administrador">Bloqueado</span>`
-                    }
-                </td>
-            </tr>
-        `;
+        <tr class="hover:bg-dark transition-colors group">
+          <td class="p-4 flex items-center gap-3">
+            <img src="${p.imageUrl || (p.media?.images && p.media.images[0]) || 'https://images.unsplash.com/photo-1581636625402-29f2a01222ce'}" class="w-10 h-10 object-cover rounded border border-gray-700" alt="${p.name}">
+            <div>
+              <p class="font-bold text-white truncate max-w-[200px]">${p.name}</p>
+              <p class="text-xs text-gray-500">${displayId}</p>
+            </div>
+          </td>
+          <td class="p-4">
+            $${Number(p.priceRegular || 0).toLocaleString("es-CO")}
+            ${p.isOffer ? `<br><span class="text-xs text-neon font-bold">OFERTA: $${Number(p.priceOffer || 0).toLocaleString("es-CO")}</span>` : ""}
+          </td>
+          <td class="p-4 text-gray-300 text-sm">${p.category || 'General'}</td>
+          <td class="p-4">
+            <div class="flex items-center gap-2">
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" onchange="toggleProductStatus('${safeId}')" class="sr-only peer" ${isAvailable ? "checked" : ""}>
+                <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-neon"></div>
+              </label>
+              <span class="text-xs">${statusText}</span>
+            </div>
+          </td>
+          <td class="p-4 text-right space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button type="button" data-action="edit" data-id="${safeId}" class="text-blue-400 hover:text-blue-300 text-sm font-medium">Editar</button>
+            ${
+              (typeof getCurrentSession === "function" && getCurrentSession()?.role === "admin")
+                ? `<button type="button" id="del-btn-${safeId}" onclick="confirmDelete('${safeId}')" class="text-red-500 hover:text-red-400 text-sm font-medium">Eliminar</button>`
+                : `<span class="text-xs text-gray-600 cursor-not-allowed">Bloqueado</span>`
+            }
+          </td>
+        </tr>
+      `;
     })
     .join("");
 }
+
+// Delegación global de clics para capturar el botón Editar sin fallas de binding
+document.addEventListener("DOMContentLoaded", () => {
+  const tableBody = document.getElementById("inventory-table-body");
+  if (tableBody) {
+    tableBody.addEventListener("click", (e) => {
+      const editBtn = e.target.closest('button[data-action="edit"]');
+      if (editBtn) {
+        const prodId = editBtn.getAttribute("data-id");
+        if (prodId) window.editProduct(prodId);
+      }
+    });
+  }
+});
 
 // Acción de Doble Confirmación para Eliminar
 window.confirmDelete = function (id) {
@@ -1006,25 +1038,6 @@ window.removeVariantColor = function (idx) {
 
 
 
-
-
-// Unificación de carga de inventario soportando ambas claves de almacenamiento
-function loadProducts() {
-  const stored = localStorage.getItem("wz_core_products") || localStorage.getItem("wz_products");
-  try {
-    return stored ? JSON.parse(stored) : [];
-  } catch (err) {
-    console.error("Fallo al parsear inventario:", err);
-    return [];
-  }
-}
-
-// Persistencia sincronizada en ambas claves de almacenamiento
-function saveProducts(products) {
-  const json = JSON.stringify(products);
-  localStorage.setItem("wz_core_products", json);
-  localStorage.setItem("wz_products", json);
-}
 
 // Cargar producto en el formulario para edición sin pérdida de estado
 window.editProduct = function (id) {

@@ -13,10 +13,10 @@
     />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Directiva Content Security Policy estricta para navegación pública -->
+    <!-- Directiva Content Security Policy configurada para ecosistema WhatsApp y Assets -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://images.unsplash.com; media-src 'self' data: blob:; connect-src 'self' https://wa.me; frame-src https://wa.me;"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://images.unsplash.com; media-src 'self' data: blob:; connect-src 'self' https://wa.me https://api.whatsapp.com https://web.whatsapp.com; frame-src https://wa.me https://api.whatsapp.com https://web.whatsapp.com;"
     />
     <title>WZSTORE | Alto Rendimiento</title>
 
@@ -112,8 +112,9 @@
       });
     </script>
   </head>
+  <body class="bg-[#080b11] text-white selection:bg-green-500 selection:text-black">
 
-<!-- MODAL MINIMALISTA DE NOTIFICACIONES Y ALERTAS -->
+    <!-- MODAL MINIMALISTA DE NOTIFICACIONES Y ALERTAS -->
     <div id="wz-alert-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4 transition-opacity duration-200">
       <div class="bg-[#111726] border border-[#1e293b] rounded-xl max-w-sm w-full p-6 text-center shadow-2xl transform transition-transform">
         <h3 id="wz-alert-title" class="text-base font-bold text-white mb-2 uppercase tracking-wide">Notificación</h3>
@@ -128,7 +129,7 @@
       </div>
     </div>
 
-  <body class="bg-[#080b11] text-white selection:bg-green-500 selection:text-black">
+
     <!-- Header Principal -->
     <header class="sticky top-0 bg-[#080b11]/90 backdrop-blur-md border-b border-[#1e293b] z-40">
 

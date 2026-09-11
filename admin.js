@@ -501,11 +501,22 @@ function loadProducts() {
   }
 }
 
-// Persistencia sincronizada en ambas claves de almacenamiento
+// Persistencia sincronizada con captura controlada de desbordamiento de cuota
 function saveProducts(products) {
-  const json = JSON.stringify(products);
-  localStorage.setItem("wz_core_products", json);
-  localStorage.setItem("wz_products", json);
+  try {
+    const json = JSON.stringify(products);
+    localStorage.setItem("wz_core_products", json);
+    localStorage.setItem("wz_products", json);
+  } catch (err) {
+    console.error("Fallo crítico de almacenamiento local:", err);
+    if (err.name === "QuotaExceededError" || err.code === 22) {
+      if (typeof showToast === "function") {
+        showToast("Error: Memoria de almacenamiento local llena. Elimina imágenes pesadas o productos antiguos.", "error");
+      } else {
+        alert("Error: Memoria local llena. Reduce la resolución de las fotos o elimina registros obsoletos.");
+      }
+    }
+  }
 }
 
 // Renderizado de tabla con atributos data para delegación segura de eventos
@@ -885,18 +896,35 @@ const handleFiles = async (files) => {
   renderMediaPreviews();
 };
 
+// Apertura limpia del formulario CRUD en modo creación asegurando reseteo total
 document.getElementById("open-crud-btn").addEventListener("click", () => {
   editingId = null;
-  form.reset();
+  const hiddenIdInput = document.getElementById("product-id");
+  if (hiddenIdInput) hiddenIdInput.value = "";
+  if (form) {
+    delete form.dataset.editingId;
+    form.reset();
+  }
+
   currentVariants = [];
   mediaBuffer = { images: [], video: "" };
   renderMediaPreviews();
   initMediaDropZone();
- document.getElementById("crud-modal-title").innerText = "Añadir Nueva Prenda";
-  document.getElementById("offer-controls").classList.add("hidden");
-  updateSubcategoryOptions(document.getElementById("prod-category").value);
+
+  document.getElementById("crud-modal-title").innerText = "Añadir Nueva Prenda";
+  
+  const offerControls = document.getElementById("offer-controls");
+  if (offerControls) offerControls.classList.add("hidden");
+
+  const catSelect = document.getElementById("prod-category");
+  if (catSelect) {
+    catSelect.value = "hombre";
+    updateSubcategoryOptions("hombre");
+  }
+
   const featuredCheck = document.getElementById("prod-is-featured");
   if (featuredCheck) featuredCheck.checked = false;
+
   renderVariantsList();
 
   modal.classList.remove("hidden");
@@ -921,14 +949,20 @@ const TAXONOMY_MAP = {
   accesorios: ["Mochilas", "Guantes", "Gorras", "Termos", "Cinturones", "Otros"]
 };
 
-// Actualización reactiva del selector dependiente de prendas
+// Actualización reactiva y tolerante del selector de prendas según categoría principal
 const updateSubcategoryOptions = (selectedMainCat, preselectedSub = null) => {
   const subSelect = document.getElementById("prod-subcategory");
   if (!subSelect) return;
 
-  const validItems = TAXONOMY_MAP[selectedMainCat] || TAXONOMY_MAP["hombre"];
+  // Normalización de llave para evitar fallos por mayúsculas/minúsculas
+  const normalizedKey = (selectedMainCat || "hombre").toLowerCase();
+  const validItems = TAXONOMY_MAP[normalizedKey] || TAXONOMY_MAP["hombre"] || [];
+
   subSelect.innerHTML = validItems
-    .map((item) => `<option value="${item}" ${preselectedSub === item ? "selected" : ""}>${item}</option>`)
+    .map((item) => {
+      const isSelected = preselectedSub && item.toLowerCase() === String(preselectedSub).toLowerCase();
+      return `<option value="${item}" ${isSelected ? "selected" : ""}>${item}</option>`;
+    })
     .join("");
 };
 

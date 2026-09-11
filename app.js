@@ -821,6 +821,9 @@ const processCheckout = () => {
 
   const whatsappUrl = `https://wa.me/573006724082?text=${encodeURIComponent(msg)}`;
 
+  // Ejecutar redirección protegida a la API de WhatsApp
+  window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+
   // Vaciar carrito y cerrar modal tras despachar la orden
   cart = [];
   appliedCoupon = null;
@@ -833,11 +836,13 @@ const processCheckout = () => {
   }
 };
 
+
 // ==========================================
 // CONTROL DE VIDEO STREAMING EN HOVER
 // ==========================================
+// Reproducción de video bajo demanda con control eficiente de ciclo de vida
 window.playProductVideo = (container, productId) => {
-  const prod = products.find(p => p.id === productId);
+  const prod = products.find((p) => String(p.id) === String(productId));
   if (!prod?.media?.video) return;
 
   const img = container.querySelector('img');
@@ -849,25 +854,29 @@ window.playProductVideo = (container, productId) => {
     video.muted = true;
     video.loop = true;
     video.playsInline = true;
+    video.preload = "auto";
     video.className = "w-full h-full object-cover transition-opacity duration-300 opacity-0";
     container.appendChild(video);
   }
 
-  img.classList.add('hidden');
+  if (img) img.classList.add('hidden');
   video.classList.remove('hidden');
   setTimeout(() => video.classList.remove('opacity-0'), 20);
   video.play().catch(() => {});
 };
 
+// Detención y liberación del buffer de video para prevenir fugas de memoria
 window.stopProductVideo = (container) => {
   const img = container.querySelector('img');
   const video = container.querySelector('video');
   if (video) {
     video.pause();
-    video.classList.add('opacity-0');
-    video.classList.add('hidden');
+    video.currentTime = 0;
+    video.classList.add('opacity-0', 'hidden');
   }
-  if (img) img.classList.remove('hidden');
+  if (img) {
+    img.classList.remove('hidden');
+  }
 };
 
 window.calculateRecommendedSize = () => {

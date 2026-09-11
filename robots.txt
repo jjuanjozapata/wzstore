@@ -1,13 +1,19 @@
+# Permitir rastreo universal a todos los motores de búsqueda
 User-agent: *
 Allow: /
-Allow: /favicon.svg
-Allow: /*.png$
-Allow: /*.svg$
 
-# Acceso prioritario para rastreador de imágenes de Google
+# Directivas explícitas para Googlebot permitiendo acceso a páginas y recursos del repositorio
+User-agent: Googlebot
+Allow: /wzstore/
+Allow: /wzstore/favicon.svg
+Allow: /wzstore/logo-*.png
+Allow: /wzstore/apple-touch-icon.png
+
+# Acceso total sin restricciones para el rastreador de favicons e imágenes de Google
 User-agent: Googlebot-Image
-Allow: /favicon.svg
-Allow: /logo-*.png
-Allow: /apple-touch-icon.png
+Allow: /wzstore/
+Allow: /wzstore/favicon.svg
+Allow: /wzstore/logo-*.png
+Allow: /wzstore/apple-touch-icon.png
 
 Sitemap: https://jjuanjozapata.github.io/wzstore/sitemap.xml

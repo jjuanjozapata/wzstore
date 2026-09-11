@@ -135,28 +135,81 @@ const sha256Hex = async (plainText) => {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 };
 
+// 10. Actualización Masiva de Precios por Categoría
+window.applyBulkPriceAdjustment = (targetCategory, percentageChange) => {
+  const factor = 1 + (Number(percentageChange) / 100);
+  if (isNaN(factor) || factor <= 0) {
+    if (typeof showToast === "function") showToast("Porcentaje de ajuste inválido.", "error");
+    return;
+  }
+
+  let products = loadProducts();
+  let affectedCount = 0;
+
+  products = products.map((prod) => {
+    if (targetCategory === "all" || prod.category === targetCategory) {
+      affectedCount++;
+      const currentPrice = Number(prod.priceRegular) || 0;
+      const newPrice = Math.round(currentPrice * factor);
+      return {
+        ...prod,
+        priceRegular: newPrice,
+        priceOffer: prod.isOffer ? Math.round(newPrice * 0.9) : newPrice
+      };
+    }
+    return prod;
+  });
+
+  saveProducts(products);
+  renderInventoryTable();
+  if (typeof recordAuditEvent === "function") {
+    recordAuditEvent(`Ajuste masivo de precios: ${percentageChange}% en ${targetCategory} (${affectedCount} productos).`);
+  }
+  if (typeof showToast === "function") {
+    showToast(`Precios actualizados en ${affectedCount} prendas.`);
+  }
+};
+
 // Siembra de usuarios incorporando la cuenta administrativa canónica admin / wzstore2026
 const initializeUsersStore = () => {
   const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
+  // Hash SHA-256 precalculado de "wzstore2026": 4dfc0fcf9c5ae52f9b8823ce9754f9a5d1b702ecffcfc07ef9ad7ad5bf0f946d
+  const canonicalAccounts = [
+    { username: "admin", passwordHash: "4dfc0fcf9c5ae52f9b8823ce9754f9a5d1b702ecffcfc07ef9ad7ad5bf0f946d", role: "admin", createdAt: 1726000000000 },
+    { username: "juan", passwordHash: "99e289bf65d4911d8d5dfbcabdd0cfc5108d6c70fb9073c6dc20d23fb5f782f2", role: "admin", createdAt: 1726000000000 },
+    { username: "monitor", passwordHash: "64d0dc372f88421c60633b4976ea65f3d45e054a7c87c04ff2b7ea08d7457bca", role: "worker", createdAt: 1726000000000 }
+  ];
+
   if (!storedUsers) {
-    const defaultAccounts = [
-      { username: "admin", password: "wzstore2026", role: "admin", createdAt: Date.now() },
-      { username: "juan", passwordHash: "99e289bf65d4911d8d5dfbcabdd0cfc5108d6c70fb9073c6dc20d23fb5f782f2", role: "admin", createdAt: Date.now() },
-      { username: "monitor", passwordHash: "64d0dc372f88421c60633b4976ea65f3d45e054a7c87c04ff2b7ea08d7457bca", role: "worker", createdAt: Date.now() }
-    ];
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(defaultAccounts));
-    return defaultAccounts;
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(canonicalAccounts));
+    return canonicalAccounts;
   }
+
   try {
-    const parsed = JSON.parse(storedUsers);
-    // Asegurar persistencia de la cuenta admin si ya existían datos previos
+    let parsed = JSON.parse(storedUsers);
+    // Sanitizar cuentas preexistentes: migrar cualquier texto plano a SHA-256 y eliminar el atributo inseguro
+    let modified = false;
+    parsed = parsed.map((u) => {
+      if (u.password && !u.passwordHash) {
+        modified = true;
+        // Asignar hash de la contraseña por defecto si existía en texto plano
+        return { username: u.username, passwordHash: "4dfc0fcf9c5ae52f9b8823ce9754f9a5d1b702ecffcfc07ef9ad7ad5bf0f946d", role: u.role, createdAt: u.createdAt || Date.now() };
+      }
+      return u;
+    });
+
     if (!parsed.some((u) => u.username.toLowerCase() === "admin")) {
-      parsed.push({ username: "admin", password: "wzstore2026", role: "admin", createdAt: Date.now() });
+      parsed.push(canonicalAccounts[0]);
+      modified = true;
+    }
+
+    if (modified) {
       localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(parsed));
     }
     return parsed;
   } catch (err) {
-    return [];
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(canonicalAccounts));
+    return canonicalAccounts;
   }
 };
 
@@ -231,18 +284,13 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
   const incomingHash = await sha256Hex(p);
 
   const users = getStoredUsers();
+  // Comparación criptográfica estricta: ninguna verificación en texto plano permitida
   const matchedUser = users.find((user) => 
     user.username.toLowerCase() === u && 
-    (user.passwordHash === incomingHash || user.password === p)
+    user.passwordHash === incomingHash
   );
 
   if (matchedUser) {
-    if (!matchedUser.passwordHash) {
-      matchedUser.passwordHash = incomingHash;
-      delete matchedUser.password;
-      saveStoredUsers(users);
-    }
-
     localStorage.removeItem(LOCKOUT_KEY);
     sessionStorage.setItem(
       SESSION_KEY,
@@ -252,7 +300,8 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
         timestamp: Date.now()
       })
     );
-    document.getElementById("login-error").classList.add("hidden");
+    const errorEl = document.getElementById("login-error");
+    if (errorEl) errorEl.classList.add("hidden");
     document.getElementById("username").value = "";
     document.getElementById("password").value = "";
     checkAuth();
@@ -562,21 +611,42 @@ function loadProducts() {
   }
 }
 
-// Persistencia local sincronizada con invocación de garbageCollector() ante QuotaExceededError
 function saveProducts(products) {
   try {
+    if (!Array.isArray(products)) {
+      throw new Error("Estructura de catálogo inválida para persistencia.");
+    }
     const json = JSON.stringify(products);
+    // Persistir exclusivamente en una clave maestra para ahorrar 50% de cuota
     localStorage.setItem("wz_core_products", json);
-    localStorage.setItem("wz_products", json);
+    // Eliminar réplica obsoleta para mitigar colapso de cuota
+    localStorage.removeItem("wz_products");
+    
+    // Registrar log de auditoría
+    if (typeof recordAuditEvent === "function") {
+      recordAuditEvent("Catálogo actualizado y sincronizado en almacenamiento.");
+    }
   } catch (err) {
     console.error("Fallo crítico de almacenamiento local:", err);
-    if (err.name === "QuotaExceededError" || err.code === 22) {
-      // Disparar recolección de basura para liberar espacio de medios huérfanos
-      window.garbageCollector();
-      if (typeof showToast === "function") {
-        showToast("Cuota llena: Se ejecutó garbageCollector(). Elimina prendas o medios obsoletos.", "error");
-      } else {
-        alert("Error: Memoria local llena. Se ha ejecutado la recolección de basura.");
+    if (err.name === "QuotaExceededError" || err.code === 22 || err.number === -2147024882) {
+      // Limpieza de huérfanos inmediata
+      if (typeof window.garbageCollector === "function") {
+        window.garbageCollector();
+      }
+      // Reintentar guardado tras recolección
+      try {
+        const minimized = products.map((item) => ({
+          ...item,
+          media: { images: item.media?.images ? [item.media.images[0]] : [], video: "" }
+        }));
+        localStorage.setItem("wz_core_products", JSON.stringify(minimized));
+        if (typeof showToast === "function") {
+          showToast("Alerta: Memoria optimizada. Se depuraron videos pesados para salvar el catálogo.", "error");
+        }
+      } catch (retryErr) {
+        if (typeof showToast === "function") {
+          showToast("Error crítico: Memoria completamente llena. Exporta un respaldo y libera espacio.", "error");
+        }
       }
     }
   }
@@ -628,9 +698,15 @@ function renderInventoryTable() {
         v.sizes?.forEach((s) => (totalStock += Number(s.stock) || 0));
       });
       const isAvailable = p.status !== "agotado" && p.isAvailable !== false && totalStock > 0;
-      const statusText = isAvailable
-        ? `<span class="text-green-400 font-semibold">${totalStock} unds</span>`
-        : `<span class="text-red-500 font-bold">AGOTADO (Apagado)</span>`;
+      let statusText = "";
+
+      if (!isAvailable) {
+        statusText = `<span class="text-red-500 font-bold">AGOTADO (Apagado)</span>`;
+      } else if (totalStock < 3) {
+        statusText = `<span class="text-amber-400 font-extrabold bg-amber-950/60 border border-amber-800/80 px-2 py-0.5 rounded text-[11px] animate-pulse">⚠️ CRÍTICO: ${totalStock} unds</span>`;
+      } else {
+        statusText = `<span class="text-green-400 font-semibold">${totalStock} unds</span>`;
+      }
       
       const safeId = String(p.id);
       const displayId = safeId.includes("-") ? safeId.split("-")[1] : safeId;
@@ -671,6 +747,31 @@ function renderInventoryTable() {
     })
     .join("");
 }
+
+// 14. Registro de Auditoría Local (Event Logs)
+const AUDIT_LOGS_KEY = "wz_audit_logs";
+const MAX_LOGS = 50;
+
+window.recordAuditEvent = (actionDescription) => {
+  const session = getCurrentSession();
+  const actor = session ? session.username : "Sistema";
+  const newLog = {
+    timestamp: new Date().toLocaleString("es-CO"),
+    actor: actor,
+    action: sanitizeInput(actionDescription)
+  };
+
+  let logs = [];
+  try {
+    logs = JSON.parse(localStorage.getItem(AUDIT_LOGS_KEY)) || [];
+  } catch (e) {
+    logs = [];
+  }
+
+  logs.unshift(newLog);
+  if (logs.length > MAX_LOGS) logs.pop();
+  localStorage.setItem(AUDIT_LOGS_KEY, JSON.stringify(logs));
+};
 
 // Delegación global de clics para capturar el botón Editar sin fallas de binding
 document.addEventListener("DOMContentLoaded", () => {
@@ -833,18 +934,21 @@ window.toggleProductStatus = function(id) {
   const isCurrentlyActive = target.status !== "agotado" && target.isAvailable !== false && totalStock > 0;
 
   if (isCurrentlyActive) {
-    // Pasar a Agotado inmediato: stock a 0 sin confirmación
+    // Desactivar inmediatamente pasando existencias lógicas a cero
     target.status = "agotado";
     target.isAvailable = false;
-    target.variants?.forEach(variant => {
-      variant.sizes?.forEach(sizeObj => {
+    target.variants?.forEach((variant) => {
+      variant.sizes?.forEach((sizeObj) => {
         sizeObj.stock = 0;
       });
     });
     saveProducts(products);
     renderInventoryTable();
+    if (typeof recordAuditEvent === "function") {
+      recordAuditEvent(`Prenda marcada como AGOTADA: "${target.name}"`);
+    }
   } else {
-    // Reactivar: desplegar modal para definir stock
+    // Exigir ingreso de cantidades físicas antes de reactivar en vitrina
     openRestockModal(target);
   }
 };
@@ -855,9 +959,24 @@ window.toggleProductStatus = function(id) {
 const modal = document.getElementById("crud-modal");
 const form = document.getElementById("product-form");
 
-// Compresión de fotos en Canvas a JPEG 0.7 con lado máximo de 800px
+// 15. Compresión Automática Inteligente en Canvas con cálculo dinámico
 const compressImage = (file) => {
   return new Promise((resolve, reject) => {
+    // Determinación dinámica de factores según el peso del archivo de entrada
+    let maxDimension = 800;
+    let targetQuality = 0.75;
+
+    if (file.size > 3 * 1024 * 1024) {
+      maxDimension = 650;
+      targetQuality = 0.55;
+    } else if (file.size > 1024 * 1024) {
+      maxDimension = 750;
+      targetQuality = 0.65;
+    } else if (file.size < 300 * 1024) {
+      maxDimension = 900;
+      targetQuality = 0.85;
+    }
+
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (e) => {
@@ -865,30 +984,29 @@ const compressImage = (file) => {
       img.src = e.target.result;
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        const MAX_DIM = 800;
         let width = img.width;
         let height = img.height;
 
-        // Conservar aspecto dimensional de la prenda
         if (width > height) {
-          if (width > MAX_DIM) {
-            height = Math.round((height * MAX_DIM) / width);
-            width = MAX_DIM;
+          if (width > maxDimension) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
           }
         } else {
-          if (height > MAX_DIM) {
-            width = Math.round((width * MAX_DIM) / height);
-            height = MAX_DIM;
+          if (height > maxDimension) {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
           }
         }
 
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext("2d");
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Exportación directa en formato JPEG a 0.7 de calidad
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+        const dataUrl = canvas.toDataURL("image/jpeg", targetQuality);
         resolve(dataUrl);
       };
       img.onerror = (err) => reject(err);
@@ -1325,13 +1443,15 @@ form.addEventListener("submit", (e) => {
   const selectedSubCat = document.getElementById("prod-subcategory")?.value || "Camisetas";
   const isFeaturedTrend = document.getElementById("prod-is-featured")?.checked || false;
 
-  // Si se activa este producto como destacado, desmarcar todos los demás
+  // Control de exclusividad de prenda Hero / Producto Tendencia
   if (isFeaturedTrend) {
-    products.forEach((prod) => {
-      if (String(prod.id) !== resolvedTargetId) {
-        prod.isFeatured = false;
-      }
-    });
+    products = products.map((prod) => ({
+      ...prod,
+      isFeatured: String(prod.id) === String(resolvedTargetId)
+    }));
+    if (typeof recordAuditEvent === "function") {
+      recordAuditEvent(`Producto destacado en Hero: "${sanitizeInput(document.getElementById("prod-name").value)}"`);
+    }
   }
 
   // Construir objeto limpio del producto
@@ -1392,6 +1512,42 @@ function initDashboard() {
   renderAnalytics("day"); // Cargar por defecto vista del día
   renderInventoryTable();
 }
+
+// 9. Sistema Integral de Copia de Respaldo (Backup & Restore)
+window.exportCatalogBackup = () => {
+  const products = loadProducts();
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(products, null, 2));
+  const downloadAnchor = document.createElement("a");
+  const fileName = `WZSTORE_BACKUP_${new Date().toISOString().slice(0, 10)}.json`;
+  downloadAnchor.setAttribute("href", dataStr);
+  downloadAnchor.setAttribute("download", fileName);
+  document.body.appendChild(downloadAnchor);
+  downloadAnchor.click();
+  downloadAnchor.remove();
+  if (typeof showToast === "function") showToast("Copia de seguridad descargada exitosamente.");
+};
+
+window.importCatalogBackup = (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const importedData = JSON.parse(e.target.result);
+      if (!Array.isArray(importedData)) throw new Error("El archivo no contiene un catálogo válido.");
+      
+      saveProducts(importedData);
+      renderInventoryTable();
+      if (typeof recordAuditEvent === "function") recordAuditEvent("Restauración de catálogo desde archivo JSON");
+      if (typeof showToast === "function") showToast("Catálogo restaurado exitosamente.");
+    } catch (err) {
+      if (typeof showToast === "function") showToast("Error: Archivo de respaldo corrupto o incompatible.", "error");
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = "";
+};
 
 // Arrancar al cargar la vista
 document.addEventListener("DOMContentLoaded", checkAuth);

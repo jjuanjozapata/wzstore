@@ -231,18 +231,30 @@ document.addEventListener("DOMContentLoaded", () => {
   setupEventListeners();
   initMobileVideoObserver();
 
-  // Despliegue inteligente del Sticky Bar en móviles según umbral de scroll
+  // Barra flotante sticky de compra rápida para móviles
   const stickyBar = document.getElementById("wz-sticky-bar");
+  const stickyTitle = document.getElementById("wz-sticky-title");
+  const stickyPrice = document.getElementById("wz-sticky-price");
   if (stickyBar) {
-    let lastScrollY = window.scrollY;
     window.addEventListener("scroll", () => {
       const currentScrollY = window.scrollY;
-      if (currentScrollY > 280) {
+      if (currentScrollY > 320) {
+        // Obtener el primer producto visible en el viewport
+        const cards = document.querySelectorAll(".product-media-container");
+        for (const card of cards) {
+          const rect = card.getBoundingClientRect();
+          if (rect.top >= 0 && rect.top <= 400) {
+            const prodTitle = card.parentElement.querySelector("h3")?.innerText;
+            const prodPrice = card.parentElement.querySelector(".font-black")?.innerText;
+            if (stickyTitle && prodTitle) stickyTitle.textContent = prodTitle;
+            if (stickyPrice && prodPrice) stickyPrice.textContent = prodPrice;
+            break;
+          }
+        }
         stickyBar.classList.remove("translate-y-full");
       } else {
         stickyBar.classList.add("translate-y-full");
       }
-      lastScrollY = currentScrollY;
     }, { passive: true });
   }
 });
@@ -281,14 +293,15 @@ const checkAbandonedCartReminder = () => {
 
 
 const setupEventListeners = () => {
-  // Filtro de b squeda por texto reactivo
-  let debounceTimer;
+  // Buscador con debounce optimizado a 300ms y sanitización activa
+  let debounceTimer = null;
   const searchInput = document.getElementById("search-input");
   if (searchInput) {
     searchInput.addEventListener("input", (e) => {
       clearTimeout(debounceTimer);
+      const query = e.target.value;
       debounceTimer = setTimeout(() => {
-        currentFilter.text = sanitizeInput(e.target.value.toLowerCase());
+        currentFilter.text = sanitizeInput(query.trim().toLowerCase());
         executeMasterFilters();
       }, 300);
     });
@@ -509,19 +522,25 @@ const renderCatalog = (catalogData = null) => {
         })
         .join("");
 
-      // Análisis de escasez para badges de urgencia (CRO / FOMO)
+      // Badges avanzados de Urgencia / Escasez (CRO)
       let scarcityBadgeHtml = "";
       if (!isAgotado) {
-        if (totalStock <= 3 && totalStock > 0) {
+        if (totalStock <= 2 && totalStock > 0) {
           scarcityBadgeHtml = `
-            <span class="absolute top-3 left-3 z-10 bg-amber-500 text-black text-[10px] font-black uppercase px-2.5 py-1 rounded-md shadow-lg shadow-amber-500/20 tracking-wider flex items-center gap-1">
-              ⚡ ¡ÚLTIMAS ${totalStock} UDS!
+            <span class="absolute top-3 left-3 z-10 bg-red-600 text-white text-[10px] font-black uppercase px-2 py-1 rounded shadow-lg tracking-wider animate-pulse flex items-center gap-1">
+              🔥 ¡SÓLO ${totalStock} DISPONIBLE${totalStock > 1 ? 'S' : ''}!
+            </span>
+          `;
+        } else if (totalStock <= 5 && totalStock > 2) {
+          scarcityBadgeHtml = `
+            <span class="absolute top-3 left-3 z-10 bg-amber-500 text-black text-[10px] font-black uppercase px-2 py-1 rounded shadow-lg shadow-amber-500/20 tracking-wider flex items-center gap-1">
+              ⚡ AGOTÁNDOSE RÁPIDO
             </span>
           `;
         } else if (p.badge) {
           scarcityBadgeHtml = `
-            <span class="absolute top-3 left-3 z-10 bg-emerald-500 text-black text-[10px] font-black uppercase px-2.5 py-1 rounded-md shadow-lg tracking-wider">
-              ${p.badge}
+            <span class="absolute top-3 left-3 z-10 bg-emerald-500 text-black text-[10px] font-black uppercase px-2 py-1 rounded shadow-lg tracking-wider">
+              ${sanitizeInput(p.badge)}
             </span>
           `;
         }
@@ -543,7 +562,18 @@ const renderCatalog = (catalogData = null) => {
           : ""
       }
       <div class="product-media-container relative h-64 bg-slate-950 overflow-hidden" onmouseenter="${!isAgotado ? `playProductVideo(this, '${p.id}')` : ''}" onmouseleave="${!isAgotado ? `stopProductVideo(this, '${p.id}')` : ''}">
-        <img src="${p.imageUrl || (p.media?.images && p.media.images[0]) || 'https://images.unsplash.com/photo-1581636625402-29f2a01222ce'}" alt="${p.name}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy">
+        <!-- Skeleton loader animado de fondo -->
+        <div class="skeleton-placeholder absolute inset-0 bg-slate-800 animate-pulse transition-opacity duration-300 pointer-events-none"></div>
+        <!-- Imagen con decodificación asíncrona desacoplada del hilo principal -->
+        <img 
+          src="${p.imageUrl || (p.media?.images && p.media.images[0]) || 'https://images.unsplash.com/photo-1581636625402-29f2a01222ce'}" 
+          alt="${sanitizeInput(p.name)}" 
+          class="w-full h-full object-cover transition-all duration-300 group-hover:scale-105 opacity-0" 
+          loading="lazy"
+          decoding="async"
+          onload="this.classList.remove('opacity-0'); const sk = this.previousElementSibling; if(sk) sk.remove();"
+          onerror="this.src='https://images.unsplash.com/photo-1581636625402-29f2a01222ce'; this.classList.remove('opacity-0'); const sk = this.previousElementSibling; if(sk) sk.remove();"
+        >
       </div>
       <div class="p-4 flex flex-col flex-grow">
         <h3 class="text-base font-bold text-white truncate">${p.name}</h3>
@@ -694,17 +724,28 @@ const updateCartUI = () => {
   totalsContainer.style.display = "block";
 
   cart.forEach((item, idx) => {
-    totalItems += item.qty;
-    subtotal += item.price * item.qty;
+    // Blindaje Anti-Tampering: Forzar búsqueda del precio real en el catálogo en memoria
+    const masterProduct = products.find((p) => String(p.id) === String(item.id));
+    const verifiedUnitPrice = masterProduct 
+      ? (masterProduct.isOffer ? Number(masterProduct.priceOffer) : Number(masterProduct.priceRegular))
+      : Number(item.price);
+
+    // Sobrescribir precio manipulado en el objeto con el precio del catálogo
+    item.price = verifiedUnitPrice;
+
+    const safeQty = Math.max(1, parseInt(item.qty, 10) || 1);
+    totalItems += safeQty;
+    subtotal += verifiedUnitPrice * safeQty;
+
     cartItemsContainer.innerHTML += `
       <div class="flex gap-4 mb-4 bg-[#1e293b] p-3 rounded-lg relative">
-        <img src="${item.img}" class="w-16 h-16 object-cover rounded">
+        <img src="${item.img}" class="w-16 h-16 object-cover rounded" alt="${sanitizeInput(item.name)}">
         <div class="flex-1">
-          <p class="text-sm font-bold text-white leading-tight">${item.name}</p>
-          <p class="text-xs text-gray-400">${item.color} | Talla: ${item.size}</p>
-          <p class="text-sm text-green-400 mt-1">$${item.price.toLocaleString()} x${item.qty}</p>
+          <p class="text-sm font-bold text-white leading-tight">${sanitizeInput(item.name)}</p>
+          <p class="text-xs text-gray-400">${sanitizeInput(item.color)} | Talla: ${sanitizeInput(item.size)}</p>
+          <p class="text-sm text-green-400 mt-1">$${verifiedUnitPrice.toLocaleString("es-CO")} x${safeQty}</p>
         </div>
-        <button onclick="removeCartItem(${idx})" class="absolute top-2 right-2 text-red-500 hover:text-red-400"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        <button onclick="removeCartItem(${idx})" class="absolute top-2 right-2 text-red-500 hover:text-red-400" aria-label="Eliminar prenda"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
       </div>
     `;
   });
@@ -727,24 +768,24 @@ const updateCartUI = () => {
     shippingCost = 0;
   }
 
-  // Actualización reactiva de la barra de progreso de envío gratuito
+  // 2. Barra Dinámica de Envío Gratis optimizada (Threshold: $300.000 COP)
   const progressTextEl = document.getElementById("wz-shipping-progress-text");
   const progressPctEl = document.getElementById("wz-shipping-progress-pct");
   const progressBarEl = document.getElementById("wz-shipping-progress-bar");
 
   if (progressTextEl && progressPctEl && progressBarEl) {
     if (isFreeByThreshold || appliedCoupon === "FREEATHLETE") {
-      progressTextEl.innerHTML = `🎉 <span class="text-emerald-400 font-black">¡ENVÍO GRATUITO ACREDITADO!</span>`;
+      progressTextEl.innerHTML = `🎉 <span class="text-emerald-400 font-black tracking-wide uppercase">¡ENVÍO GRATUITO DESBLOQUEADO!</span>`;
       progressPctEl.textContent = "100%";
       progressBarEl.style.width = "100%";
-      progressBarEl.classList.add("shadow-[0_0_12px_rgba(52,211,153,0.6)]");
+      progressBarEl.className = "bg-gradient-to-r from-emerald-400 to-green-300 h-2.5 rounded-full transition-all duration-500 ease-out shadow-[0_0_15px_rgba(52,211,153,0.8)]";
     } else {
-      const remainingForFree = FREE_SHIPPING_THRESHOLD - subtotal;
-      const pct = Math.min(100, Math.round((subtotal / FREE_SHIPPING_THRESHOLD) * 100));
-      progressTextEl.innerHTML = `Agrega <strong class="text-emerald-400 font-bold">$${remainingForFree.toLocaleString("es-CO")} COP</strong> para flete gratis`;
+      const remainingForFree = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
+      const pct = Math.min(99, Math.max(0, Math.round((subtotal / FREE_SHIPPING_THRESHOLD) * 100)));
+      progressTextEl.innerHTML = `Te faltan <span class="text-emerald-400 font-extrabold">$${remainingForFree.toLocaleString("es-CO")} COP</span> para Envío Gratis`;
       progressPctEl.textContent = `${pct}%`;
       progressBarEl.style.width = `${pct}%`;
-      progressBarEl.classList.remove("shadow-[0_0_12px_rgba(52,211,153,0.6)]");
+      progressBarEl.className = "bg-gradient-to-r from-emerald-500 to-green-400 h-2 rounded-full transition-all duration-500 ease-out";
     }
   }
 
@@ -768,21 +809,32 @@ const closeDrawer = () => {
 };
 
 // Generación y copia del enlace Base64 del carrito
-const shareCartUrl = () => {
+const shareCartUrl = async () => {
   if (!cart || cart.length === 0) {
-    showNotificationModal("Carrito Vacío", "No tienes productos en el carro para compartir.");
+    showNotificationModal("Carrito Vacío", "No tienes prendas en tu selección para compartir.");
     return;
   }
   try {
-    const base64cart = btoa(unescape(encodeURIComponent(JSON.stringify(cart))));
-    const url = `${window.location.origin}${window.location.pathname}?cart=${base64cart}`;
-    navigator.clipboard.writeText(url).then(() => {
-      showNotificationModal("Enlace Generado", "El enlace de tu carrito se copió al portapapeles. Ya puedes enviarlo.");
-    }).catch(() => {
-      showNotificationModal("Aviso", `Copia este enlace manualmente:\n${url}`);
-    });
+    // Generación de payload liviano sanitizado
+    const minimalCart = cart.map((i) => ({ id: i.id, color: i.color, size: i.size, qty: i.qty }));
+    const base64cart = btoa(unescape(encodeURIComponent(JSON.stringify(minimalCart))));
+    const shareUrl = `${window.location.origin}${window.location.pathname}?cart=${base64cart}`;
+
+    if (navigator.share) {
+      await navigator.share({
+        title: 'Mi Carrito de Compra | WZSTORE',
+        text: 'Mira las prendas tácticas que seleccioné en WZSTORE Colombia:',
+        url: shareUrl
+      });
+    } else {
+      await navigator.clipboard.writeText(shareUrl);
+      showNotificationModal("Enlace Copiado", "El enlace se copió al portapapeles. Compártelo con quien desees.");
+    }
   } catch (err) {
-    console.error("Error al codificar el carrito:", err);
+    if (err.name !== 'AbortError') {
+      console.error("Fallo en Web Share API:", err);
+      showNotificationModal("Aviso", "No fue posible abrir el menú nativo. Intenta copiar la dirección manualmente.");
+    }
   }
 };
 
@@ -807,39 +859,43 @@ const recoverCartFromUrl = () => {
     const validatedCart = [];
 
     parsed.forEach((incomingItem) => {
+      // Verificación estricta de estructura para evitar inyecciones por prototipo
+      if (typeof incomingItem !== "object" || incomingItem === null) return;
+
       const cleanId = String(incomingItem.id || "").replace(/[^a-zA-Z0-9_-]/g, "");
       const authenticProduct = products.find((p) => String(p.id) === cleanId);
 
-      // Si el producto no existe o está agotado en catálogo, se descarta
       if (!authenticProduct || authenticProduct.status === "agotado" || authenticProduct.isAvailable === false) {
         return;
       }
 
-      // Validar coincidencia de variante de color
-      const incomingColor = sanitizeInput(String(incomingItem.color || ""));
+      // Sanitización completa de datos alfanuméricos contra DOM-XSS
+      const rawColor = String(incomingItem.color || "").slice(0, 30);
+      const cleanColor = sanitizeInput(rawColor);
       const matchedVariant = authenticProduct.variants?.find(
-        (v) => v.color.toLowerCase() === incomingColor.toLowerCase()
+        (v) => v.color.toLowerCase() === cleanColor.toLowerCase()
       ) || authenticProduct.variants?.[0];
 
       if (!matchedVariant) return;
 
-      // Validar coincidencia de talla y stock físico disponible
-      const incomingSize = sanitizeInput(String(incomingItem.size || "")).toUpperCase();
-      const matchedSizeObj = matchedVariant.sizes?.find((s) => s.size === incomingSize);
+      const rawSize = String(incomingItem.size || "").slice(0, 10);
+      const cleanSize = sanitizeInput(rawSize).toUpperCase();
+      const matchedSizeObj = matchedVariant.sizes?.find((s) => s.size === cleanSize);
 
       if (!matchedSizeObj || matchedSizeObj.stock <= 0) return;
 
-      // Imponer precio oficial del inventario local (inmunidad contra alteración de precios)
-      const officialPrice = authenticProduct.isOffer ? authenticProduct.priceOffer : authenticProduct.priceRegular;
-      const verifiedQty = Math.max(1, Math.min(Math.floor(Number(incomingItem.qty) || 1), matchedSizeObj.stock));
+      // Imponer precio canónico inmutable y desinfectar el nombre
+      const officialPrice = Number(authenticProduct.isOffer ? authenticProduct.priceOffer : authenticProduct.priceRegular) || 0;
+      const rawQty = parseInt(incomingItem.qty, 10);
+      const verifiedQty = isNaN(rawQty) || rawQty < 1 ? 1 : Math.min(rawQty, matchedSizeObj.stock);
 
       validatedCart.push({
         id: authenticProduct.id,
-        name: authenticProduct.name,
-        color: matchedVariant.color,
-        size: matchedSizeObj.size,
+        name: sanitizeInput(authenticProduct.name),
+        color: sanitizeInput(matchedVariant.color),
+        size: sanitizeInput(matchedSizeObj.size),
         price: officialPrice,
-        priceRegular: authenticProduct.priceRegular,
+        priceRegular: Number(authenticProduct.priceRegular) || officialPrice,
         qty: verifiedQty,
         maxStock: matchedSizeObj.stock,
         img: authenticProduct.imageUrl || (authenticProduct.media?.images && authenticProduct.media.images[0]) || "https://images.unsplash.com/photo-1581636625402-29f2a01222ce"
@@ -1045,7 +1101,6 @@ const initMobileVideoObserver = () => {
 window.addEventListener("resize", initMobileVideoObserver);
 
 window.playProductVideo = (container, productId) => {
-  // En pantallas táctiles móviles el IntersectionObserver gestiona la reproducción
   if (window.innerWidth < 1024) return;
 
   const prod = products.find((p) => String(p.id) === String(productId));
@@ -1056,19 +1111,21 @@ window.playProductVideo = (container, productId) => {
 
   if (!video) {
     video = document.createElement("video");
-    video.src = prod.media.video;
     video.muted = true;
     video.loop = true;
     video.playsInline = true;
-    video.preload = "metadata";
+    video.preload = "auto";
     video.className = "w-full h-full object-cover transition-opacity duration-300 opacity-0";
+    video.src = prod.media.video;
     container.appendChild(video);
   }
 
   if (img) img.classList.add("hidden");
   video.classList.remove("hidden");
-  setTimeout(() => video.classList.remove("opacity-0"), 20);
-  video.play().catch(() => {});
+  requestAnimationFrame(() => {
+    video.classList.remove("opacity-0");
+    video.play().catch(() => {});
+  });
 };
 
 window.stopProductVideo = (container) => {
@@ -1076,51 +1133,68 @@ window.stopProductVideo = (container) => {
 
   const img = container.querySelector("img");
   const video = container.querySelector("video");
+
   if (video) {
     video.pause();
-    video.currentTime = 0;
-    video.classList.add("opacity-0", "hidden");
+    video.removeAttribute("src"); // Desvincular buffer de streaming
+    video.load(); // Forzar al motor de render a vaciar la VRAM ocupada
+    video.remove(); // Desmontar físicamente del DOM para evitar acumulación de nodos
   }
+
   if (img) {
     img.classList.remove("hidden");
   }
 };
 
 window.calculateRecommendedSize = () => {
-  const h = Number(document.getElementById('wz-calc-height').value);
-  const w = Number(document.getElementById('wz-calc-weight').value);
+  const hInput = document.getElementById('wz-calc-height');
+  const wInput = document.getElementById('wz-calc-weight');
   const out = document.getElementById('wz-size-result');
 
-  if (!h || !w || h <= 0 || w <= 0) {
+  const h = parseFloat(hInput ? hInput.value : 0);
+  const w = parseFloat(wInput ? wInput.value : 0);
+
+  if (!h || !w || h < 120 || h > 220 || w < 35 || w > 180) {
     out.classList.remove('hidden');
-    out.innerHTML = `<span class="text-red-400">Ingresa valores válidos de peso y estatura.</span>`;
+    out.innerHTML = `<span class="text-amber-400 font-semibold">Ingresa una estatura (120-220 cm) y peso (35-180 kg) válidos.</span>`;
     return;
   }
 
-  const imc = w / ((h / 100) * (h / 100));
-  let size = "M";
+  // Índice de Masa Corporal con ajuste biométrico para tejido de compresión
+  const imc = w / Math.pow(h / 100, 2);
+  let recommendedSize = "M";
+  let fitNote = "Ajuste estándar equilibrado";
 
-  if (imc < 20) size = "S";
-  else if (imc >= 20 && imc < 25) size = (h > 175) ? "M" : "S";
-  else if (imc >= 25 && imc < 29) size = (h > 180) ? "XL" : "L";
-  else size = "XL";
+  if (imc < 19.5) {
+    recommendedSize = (h > 178) ? "M" : "S";
+    fitNote = "Compresión ceñida de alto soporte";
+  } else if (imc >= 19.5 && imc < 24.5) {
+    recommendedSize = (h > 180) ? "L" : "M";
+    fitNote = "Corte atlético óptimo";
+  } else if (imc >= 24.5 && imc < 28.5) {
+    recommendedSize = (h > 182) ? "XL" : "L";
+    fitNote = "Compresión cómoda sin estrangulamiento";
+  } else {
+    recommendedSize = "XL";
+    fitNote = "Calce amplio y flexibilidad máxima";
+  }
 
   out.classList.remove('hidden');
-  out.innerHTML = `Tu talla recomendada para corte de compresión es: <strong class="text-emerald-400 text-sm font-black">${size}</strong>`;
+  out.innerHTML = `Talla calculada: <span class="bg-emerald-500 text-black px-2 py-0.5 rounded font-black text-xs uppercase">${recommendedSize}</span> &nbsp;<span class="text-[11px] text-slate-400">(${fitNote})</span>`;
 };
 
 // ==========================================
 // CANAL EXCLUSIVO DE ATENCIÓN Y SOPORTE (POSTVENTA)
 // ==========================================
-// Configuración parametrizable del canal de ayuda (línea independiente de ventas)
 const WZ_SUPPORT_CONFIG = {
-  phone: "573159998877", // Número de soporte técnico y atención posventa
-  defaultMessage: "Hola WZSTORE, necesito ayuda con una consulta sobre la tienda."
+  phone: "573159998877", // Canal exclusivo de asesoría postventa
+  agentName: "Equipo de Atención Técnica WZ"
 };
 
-window.openSupportChat = () => {
-  const encodedText = encodeURIComponent(WZ_SUPPORT_CONFIG.defaultMessage);
-  const supportUrl = `https://wa.me/${WZ_SUPPORT_CONFIG.phone}?text=${encodedText}`;
+window.openSupportChat = (customContext = "") => {
+  const timeHour = new Date().toLocaleTimeString("es-CO", { hour: '2-digit', minute: '2-digit' });
+  const msgText = `Hola ${WZ_SUPPORT_CONFIG.agentName}, solicito asesoría personalizada en línea (${timeHour}). ${customContext ? `Motivo: ${customContext}` : '¿Podrían orientarme con un producto?'}`.trim();
+  const supportUrl = `https://wa.me/${WZ_SUPPORT_CONFIG.phone}?text=${encodeURIComponent(msgText)}`;
   window.open(supportUrl, "_blank", "noopener,noreferrer");
 };
 

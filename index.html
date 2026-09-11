@@ -15,10 +15,10 @@
     />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Content Security Policy (CSP) nivel bancario y hardening contra vectores XSS y Clickjacking -->
+    <!-- Content Security Policy (CSP) Endurecido Enterprise -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://images.unsplash.com https://jjuanjozapata.github.io; media-src 'self' data: blob:; connect-src 'self' https://wa.me https://api.whatsapp.com https://web.whatsapp.com; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://wa.me https://api.whatsapp.com;"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://images.unsplash.com https://jjuanjozapata.github.io; media-src 'self' data: blob:; connect-src 'self' https://wa.me https://api.whatsapp.com https://web.whatsapp.com; frame-ancestors 'none'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://wa.me https://api.whatsapp.com;"
     />
     <!-- Título estricto para snippet de Google SERP sin sufijos adicionales -->
     <title>WZSTORE</title>
@@ -47,8 +47,36 @@
     }
     </script>
 
-    <!-- Tailwind CDN & Styles -->
+    <!-- Tailwind CDN & Styles con Failover de Red -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Detección y contingencia por caída o bloqueo de Tailwind CDN
+      window.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
+          if (!window.tailwind) {
+            console.warn('Alerta: Falla al cargar Tailwind CDN. Inyectando estilos de emergencia.');
+            const fallbackStyle = document.createElement('style');
+            fallbackStyle.id = 'wz-cdn-fallback';
+            fallbackStyle.textContent = `
+              body { background-color: #080b11; color: #f8fafc; font-family: system-ui, sans-serif; margin: 0; padding: 0; }
+              .max-w-7xl { max-width: 80rem; margin-left: auto; margin-right: auto; padding: 1rem; }
+              .grid { display: grid; }
+              .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+              @media(min-width: 640px){ .sm\\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+              @media(min-width: 1024px){ .lg\\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+              .gap-6 { gap: 1.5rem; }
+              .bg-slate-900 { background-color: #0f172a; }
+              .rounded-xl { border-radius: 0.75rem; }
+              .p-4 { padding: 1rem; }
+              .text-emerald-400 { color: #34d399; }
+              .bg-emerald-500 { background-color: #10b981; color: #000; font-weight: bold; }
+              .hidden { display: none !important; }
+            `;
+            document.head.appendChild(fallbackStyle);
+          }
+        }, 2000);
+      });
+    </script>
     <link rel="stylesheet" href="styles.css" />
 
    <!-- MARCADO ESTRUCTURADO DINÁMICO JSON-LD PARA GOOGLE (ORGANIZATION & LOGO RICH RESULTS) -->

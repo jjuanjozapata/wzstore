@@ -31,11 +31,11 @@ let currentFilter = {
   maxPrice: Infinity
 };
 
-// Navegación en cascada reactiva al primer clic
+// Navegación en cascada: despliega obligatoriamente la selección de género antes del render
 window.handleParentCategory = (categoryName) => {
   currentFilter.category = categoryName;
 
-  // Actualizar inmediatamente clases activas de la botonera principal
+  // Actualizar clases activas en la botonera de categorías
   const catPills = document.querySelectorAll(".cat-pill");
   catPills.forEach((btn) => {
     btn.className = "cat-pill bg-slate-800 text-slate-300 hover:text-white px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all";
@@ -51,31 +51,35 @@ window.handleParentCategory = (categoryName) => {
     activeBtn.className = "cat-pill bg-emerald-500 text-black px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all";
   }
 
-  // Mostrar panel de género si es una categoría que lo requiera
+  // Control estricto de visibilidad del panel de género
   const genderContainer = document.getElementById("gender-discriminator");
   if (genderContainer) {
     if (categoryName === "all" || categoryName.toLowerCase() === "accesorios") {
       genderContainer.classList.add("hidden");
+      genderContainer.classList.remove("flex");
       currentFilter.gender = "todas";
+      executeMasterFilters();
     } else {
+      // Desplegar el selector de género para que el usuario defina o confirme la vista
       genderContainer.classList.remove("hidden");
+      genderContainer.classList.add("flex");
+      window.applyGenderFilter(currentFilter.gender || "todas", true);
     }
+  } else {
+    executeMasterFilters();
   }
-
-  // Resetear género a 'todas' sin disparar doble renderizado
-  window.applyGenderFilter("todas", false);
-  executeMasterFilters();
 };
 
-// Filtro secundario de género en cascada
+// Sincronización del filtro de género con actualización de estilos visuales
 window.applyGenderFilter = (genderValue, shouldExecute = true) => {
   currentFilter.gender = (genderValue || "todas").toLowerCase();
 
-  // Actualizar estilos activos de género al primer clic
+  // Limpiar estilos de botones de género
   document.querySelectorAll(".gender-pill").forEach((btn) => {
     btn.className = "gender-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors";
   });
 
+  // Activar botón seleccionado
   const activeGenderBtn = document.getElementById(`gender-btn-${currentFilter.gender}`);
   if (activeGenderBtn) {
     activeGenderBtn.className = "gender-pill px-3 py-1 rounded-lg text-xs font-bold bg-emerald-500 text-black transition-colors";
@@ -457,20 +461,21 @@ const renderCatalog = (catalogData = null) => {
         .join("");
 
       return `
-    <div class="relative bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col group">
+    <div class="relative bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col group transition-all duration-300 ${isAgotado ? 'opacity-60 grayscale' : ''}">
       ${
         isAgotado
           ? `
-        <!-- Overlay Agotado Infranqueable -->
-        <div class="absolute inset-0 z-20 backdrop-blur-sm bg-black/75 flex flex-col items-center justify-center p-4">
-          <span class="bg-red-600 text-white font-black text-sm px-4 py-1.5 rounded-full tracking-widest uppercase shadow-lg shadow-red-900/50">AGOTADO</span>
-          <p class="text-[11px] text-slate-400 mt-2 text-center font-medium">Prenda fuera de stock técnico</p>
+        <!-- Cinta diagonal roja de AGOTADO -->
+        <div class="absolute top-4 -right-12 w-44 bg-red-600 text-white text-[10px] font-black uppercase text-center py-1 rotate-45 shadow-lg z-30 tracking-widest pointer-events-none select-none">
+          AGOTADO
         </div>
+        <!-- Capa de bloqueo para impedir interacción de compra -->
+        <div class="absolute inset-0 z-20 bg-black/40 pointer-events-auto cursor-not-allowed"></div>
       `
           : ""
       }
-      <div class="relative h-64 bg-slate-950 overflow-hidden" onmouseenter="playProductVideo(this, '${p.id}')" onmouseleave="stopProductVideo(this, '${p.id}')">
-        <img src="${p.imageUrl || p.media?.images?.[0]}" alt="${p.name}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy">
+      <div class="relative h-64 bg-slate-950 overflow-hidden" onmouseenter="${!isAgotado ? `playProductVideo(this, '${p.id}')` : ''}" onmouseleave="${!isAgotado ? `stopProductVideo(this, '${p.id}')` : ''}">
+        <img src="${p.imageUrl || (p.media?.images && p.media.images[0]) || 'https://images.unsplash.com/photo-1581636625402-29f2a01222ce'}" alt="${p.name}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy">
       </div>
       <div class="p-4 flex flex-col flex-grow">
         <h3 class="text-base font-bold text-white truncate">${p.name}</h3>
@@ -486,7 +491,7 @@ const renderCatalog = (catalogData = null) => {
           <button onclick="addToCart('${p.id}')" class="mt-auto w-full bg-emerald-500 text-black font-bold py-2 rounded text-xs uppercase tracking-wider hover:bg-emerald-400 transition-colors">Añadir al Carro</button>
         `
             : `
-          <button disabled class="mt-auto w-full bg-slate-800 text-slate-500 font-bold py-2 rounded text-xs uppercase tracking-wider cursor-not-allowed">No Disponible</button>
+          <button disabled class="mt-auto w-full bg-slate-800 text-slate-500 font-bold py-2 rounded text-xs uppercase tracking-wider cursor-not-allowed pointer-events-none">Agotado</button>
         `
         }
       </div>
@@ -507,12 +512,16 @@ window.selectSize = (productId, sizeIdx) => {
   renderCatalog();
 };
 
-// Lógica de Compra Reactiva
+// Agrega productos integrando el modal flotante de alertas para tallas y stock
 window.addToCart = (productId) => {
   const p = products.find((x) => x.id === productId);
+  if (!p) return;
+
   const state = uiState[productId];
-  if (state.sizeIdx === null)
-    return alert("Selecciona una talla antes de agregar al carrito.");
+  if (!state || state.sizeIdx === null) {
+    showNotificationModal("Selecciona tu Talla", "Por favor elige una talla disponible antes de agregar la prenda al carro.");
+    return;
+  }
 
   const variant = p.variants[state.colorIdx];
   const sizeObj = variant.sizes[state.sizeIdx];
@@ -525,8 +534,10 @@ window.addToCart = (productId) => {
   );
 
   if (existing) {
-    if (existing.qty >= sizeObj.stock)
-      return alert("Has alcanzado el límite de stock de este artículo.");
+    if (existing.qty >= sizeObj.stock) {
+      showNotificationModal("Límite de Stock", "Has alcanzado el límite máximo de existencias para esta talla.");
+      return;
+    }
     existing.qty++;
   } else {
     cart.push({
@@ -747,12 +758,13 @@ const processCheckout = () => {
     return;
   }
 
-  // Auditoría matemática obligatoria contra la base de datos canónica en memoria local
+  // Búsqueda tolerante en almacenamiento unificado y memoria de productos
   let canonProducts = [];
   try {
-    canonProducts = JSON.parse(localStorage.getItem("wz_core_products")) || [];
+    const rawStored = localStorage.getItem("wz_core_products") || localStorage.getItem("wz_products");
+    canonProducts = rawStored ? JSON.parse(rawStored) : (products || []);
   } catch (err) {
-    canonProducts = [];
+    canonProducts = products || [];
   }
 
   let verifiedSubtotal = 0;
@@ -760,15 +772,15 @@ const processCheckout = () => {
   let verifiedCartDetails = [];
 
   for (const item of cart) {
-    const original = canonProducts.find((p) => String(p.id) === String(item.id));
+    const original = canonProducts.find((p) => String(p.id) === String(item.id)) || products.find((p) => String(p.id) === String(item.id));
     if (!original) {
-      showNotificationModal("Catálogo Desactualizado", "Uno de los productos ya no existe en la tienda.");
+      showNotificationModal("Catálogo Desactualizado", "Uno de los productos ya no se encuentra en el inventario.");
       return;
     }
 
-    // Precio oficial fijado en base canónica
+    // Precio oficial fijado desde la base canónica
     const authenticPrice = original.isOffer ? original.priceOffer : original.priceRegular;
-    const authenticRegularPrice = original.priceRegular;
+    const authenticRegularPrice = original.priceRegular || authenticPrice;
     const safeQty = Math.max(1, Math.floor(Number(item.qty) || 1));
 
     verifiedSubtotal += authenticPrice * safeQty;
@@ -784,12 +796,15 @@ const processCheckout = () => {
     });
   }
 
-  // Recálculo seguro de cupones y tarifas logísticas
+  // Recálculo seguro soportando WZ2026 y WZRECUPERA10
   let calculatedDiscount = 0;
   if (appliedCoupon === "WZ2026") {
     calculatedDiscount = Math.round(verifiedSubtotal * 0.15);
+  } else if (appliedCoupon === "WZRECUPERA10") {
+    calculatedDiscount = Math.round(verifiedSubtotal * 0.10);
   }
 
+  // Reglas de flete gratuito automático sobre $300.000 COP o con cupón FREEATHLETE
   let verifiedShipping = SHIP_RATES[shippingType] || 5000;
   if (verifiedSubtotal > 300000 || appliedCoupon === "FREEATHLETE") {
     verifiedShipping = 0;
@@ -797,6 +812,7 @@ const processCheckout = () => {
 
   const mathematicallyVerifiedTotal = verifiedSubtotal - calculatedDiscount + verifiedShipping;
 
+  // Maquetación del mensaje para despacho por WhatsApp
   let msg = `🔥 *NUEVO PEDIDO WZSTORE* 🔥\n\n`;
   msg += `👤 *Cliente:* ${firstName} ${lastName}\n`;
   msg += `📞 *Teléfono:* ${phone}\n`;
@@ -810,10 +826,11 @@ const processCheckout = () => {
     msg += `▪ ${item.name}\n   Color: ${item.color} | Talla: ${item.size} | Cant: ${item.qty} | Sub: $${item.subtotal.toLocaleString("es-CO")}\n`;
   });
 
-  const verifiedSavings = totalRegularCanon - mathematicallyVerifiedTotal;
+  // Cálculo del ahorro total del cliente y aplicación de la línea psicológica obligatoria
+  const verifiedSavings = (totalRegularCanon + (SHIP_RATES[shippingType] || 5000)) - mathematicallyVerifiedTotal;
   msg += `\n💰 *Total Liquidado: $${mathematicallyVerifiedTotal.toLocaleString("es-CO")} COP*\n`;
   if (verifiedSavings > 0) {
-    msg += `🏷️ *Ahorro en Descuentos: $${verifiedSavings.toLocaleString("es-CO")} COP*\n`;
+    msg += `🏷️ ¡Ahorro total en WZSTORE por promociones: $${verifiedSavings.toLocaleString("es-CO")} COP!\n`;
   }
   if (appliedCoupon) {
     msg += `🎟️ *Cupón Redimido:* ${appliedCoupon}\n`;

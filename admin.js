@@ -104,20 +104,23 @@ const applyRolePermissions = () => {
 };
 
 // Verificación y mantenimiento del estado de sesión
+// Control de sesión activa de 30 min sobre el contenedor #wz-login-overlay
 function checkAuth() {
   const sessionData = getCurrentSession();
   const now = Date.now();
+  const overlay = document.getElementById("wz-login-overlay") || document.getElementById("login-modal");
+  const dashboard = document.getElementById("admin-dashboard");
 
   if (!sessionData || now - sessionData.timestamp > SESSION_TIMEOUT) {
-    document.getElementById("login-modal").classList.remove("hidden");
-    document.getElementById("admin-dashboard").classList.add("hidden");
+    if (overlay) overlay.classList.remove("hidden");
+    if (dashboard) dashboard.classList.add("hidden");
     sessionStorage.removeItem(SESSION_KEY);
   } else {
-    // Renovar marca de tiempo de actividad
+    // Renovar marca de tiempo de actividad en sessionStorage
     sessionData.timestamp = now;
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
-    document.getElementById("login-modal").classList.add("hidden");
-    document.getElementById("admin-dashboard").classList.remove("hidden");
+    if (overlay) overlay.classList.add("hidden");
+    if (dashboard) dashboard.classList.remove("hidden");
     initDashboard();
     applyRolePermissions();
   }
@@ -132,13 +135,12 @@ const sha256Hex = async (plainText) => {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 };
 
-// Hashes precalculados para arranque de seguridad:
-// "juan1234"      -> 99e289bf65d4911d8d5dfbcabdd0cfc5108d6c70fb9073c6dc20d23fb5f782f2
-// "wzmonitor2026" -> 64d0dc372f88421c60633b4976ea65f3d45e054a7c87c04ff2b7ea08d7457bca
+// Siembra de usuarios incorporando la cuenta administrativa canónica admin / wzstore2026
 const initializeUsersStore = () => {
   const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
   if (!storedUsers) {
     const defaultAccounts = [
+      { username: "admin", password: "wzstore2026", role: "admin", createdAt: Date.now() },
       { username: "juan", passwordHash: "99e289bf65d4911d8d5dfbcabdd0cfc5108d6c70fb9073c6dc20d23fb5f782f2", role: "admin", createdAt: Date.now() },
       { username: "monitor", passwordHash: "64d0dc372f88421c60633b4976ea65f3d45e054a7c87c04ff2b7ea08d7457bca", role: "worker", createdAt: Date.now() }
     ];
@@ -146,7 +148,13 @@ const initializeUsersStore = () => {
     return defaultAccounts;
   }
   try {
-    return JSON.parse(storedUsers);
+    const parsed = JSON.parse(storedUsers);
+    // Asegurar persistencia de la cuenta admin si ya existían datos previos
+    if (!parsed.some((u) => u.username.toLowerCase() === "admin")) {
+      parsed.push({ username: "admin", password: "wzstore2026", role: "admin", createdAt: Date.now() });
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(parsed));
+    }
+    return parsed;
   } catch (err) {
     return [];
   }
@@ -501,7 +509,7 @@ function loadProducts() {
   }
 }
 
-// Persistencia sincronizada con captura controlada de desbordamiento de cuota
+// Persistencia local sincronizada con invocación de garbageCollector() ante QuotaExceededError
 function saveProducts(products) {
   try {
     const json = JSON.stringify(products);
@@ -510,14 +518,44 @@ function saveProducts(products) {
   } catch (err) {
     console.error("Fallo crítico de almacenamiento local:", err);
     if (err.name === "QuotaExceededError" || err.code === 22) {
+      // Disparar recolección de basura para liberar espacio de medios huérfanos
+      window.garbageCollector();
       if (typeof showToast === "function") {
-        showToast("Error: Memoria de almacenamiento local llena. Elimina imágenes pesadas o productos antiguos.", "error");
+        showToast("Cuota llena: Se ejecutó garbageCollector(). Elimina prendas o medios obsoletos.", "error");
       } else {
-        alert("Error: Memoria local llena. Reduce la resolución de las fotos o elimina registros obsoletos.");
+        alert("Error: Memoria local llena. Se ha ejecutado la recolección de basura.");
       }
     }
   }
 }
+
+// Recolector de basura expuesto globalmente como garbageCollector()
+window.garbageCollector = function () {
+  const rawProducts = localStorage.getItem("wz_core_products") || localStorage.getItem("wz_products");
+  let activeList = [];
+  try {
+    activeList = rawProducts ? JSON.parse(rawProducts) : [];
+  } catch (e) {
+    activeList = [];
+  }
+
+  const registeredMedia = new Set();
+  activeList.forEach((p) => {
+    if (p.imageUrl) registeredMedia.add(p.imageUrl);
+    if (p.media?.images) p.media.images.forEach((img) => registeredMedia.add(img));
+    if (p.media?.video) registeredMedia.add(p.media.video);
+  });
+
+  // Limpieza de claves huérfanas en localStorage
+  Object.keys(localStorage).forEach((key) => {
+    if (key.startsWith("wz_media_orphan_") || key.startsWith("wz_temp_")) {
+      const stored = localStorage.getItem(key);
+      if (!registeredMedia.has(stored)) {
+        localStorage.removeItem(key);
+      }
+    }
+  });
+};
 
 // Renderizado de tabla con atributos data para delegación segura de eventos
 function renderInventoryTable() {
@@ -674,7 +712,8 @@ function initRestockModal() {
         }
       }
 
-      target.status = "disponible";
+      // Reasignación de inventario pasando el estado a 'activo'
+      target.status = "activo";
       target.isAvailable = true;
       saveProducts(products);
     }
@@ -695,11 +734,11 @@ function openRestockModal(target) {
     const qtyStr = prompt(`Reactivar inventario para "${target.name}".\nIngresa la cantidad de prendas disponibles:`, "10");
     const qty = parseInt(qtyStr, 10);
     if (!isNaN(qty) && qty > 0) {
-      target.variants?.forEach(v => v.sizes?.forEach(s => (s.stock = qty)));
-      target.status = "disponible";
+      target.variants?.forEach((v) => v.sizes?.forEach((s) => (s.stock = qty)));
+      target.status = "activo";
       target.isAvailable = true;
       let products = loadProducts();
-      const idx = products.findIndex(p => p.id === target.id);
+      const idx = products.findIndex((p) => p.id === target.id);
       if (idx > -1) products[idx] = target;
       saveProducts(products);
     }
@@ -763,7 +802,7 @@ window.toggleProductStatus = function(id) {
 const modal = document.getElementById("crud-modal");
 const form = document.getElementById("product-form");
 
-// Compresión optimizada en Canvas a formato WebP (Máx 800x800px, 0.72)
+// Compresión de fotos en Canvas a JPEG 0.7 con lado máximo de 800px
 const compressImage = (file) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -777,7 +816,7 @@ const compressImage = (file) => {
         let width = img.width;
         let height = img.height;
 
-        // Mantener proporción matemática del encuadre
+        // Conservar aspecto dimensional de la prenda
         if (width > height) {
           if (width > MAX_DIM) {
             height = Math.round((height * MAX_DIM) / width);
@@ -795,11 +834,8 @@ const compressImage = (file) => {
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Intentar WebP para menor consumo de bytes; si el browser no lo soporta cae a JPEG
-        let dataUrl = canvas.toDataURL("image/webp", 0.72);
-        if (!dataUrl.startsWith("data:image/webp")) {
-          dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-        }
+        // Exportación directa en formato JPEG a 0.7 de calidad
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
         resolve(dataUrl);
       };
       img.onerror = (err) => reject(err);
@@ -808,11 +844,16 @@ const compressImage = (file) => {
   });
 };
 
-// Conversión de Video MP4 validando tope de 3MB
+// Procesamiento de video MP4 validando cuota máxima de 4MB
 const processVideo = (file) => {
   return new Promise((resolve, reject) => {
-    if (file.size > 3 * 1024 * 1024) {
-      alert("El video supera el límite de 3MB permitido en memoria local.");
+    const MAX_VIDEO_BYTES = 4 * 1024 * 1024; // Límite exacto de 4MB
+    if (file.size > MAX_VIDEO_BYTES) {
+      if (typeof showToast === "function") {
+        showToast("El video excede el límite permitido de 4MB.", "error");
+      } else {
+        alert("El video excede el límite permitido de 4MB.");
+      }
       return resolve(null);
     }
     const reader = new FileReader();
@@ -985,17 +1026,34 @@ offerToggle.addEventListener("change", (e) => {
   }
 });
 
-priceInput.addEventListener("input", calculateOfferPrice);
-discountSlider.addEventListener("input", calculateOfferPrice);
+// Obtener referencia al campo de precio regular sin romper el hilo de ejecución
+const priceInput = document.getElementById("prod-price");
 
+if (priceInput) {
+  priceInput.addEventListener("input", calculateOfferPrice);
+}
+if (discountSlider) {
+  discountSlider.addEventListener("input", calculateOfferPrice);
+}
+
+// Calcula el precio de oferta aplicando el porcentaje en tiempo real
 function calculateOfferPrice() {
-  const base = Number(priceInput.value) || 0;
-  const discount = Number(discountSlider.value);
-  document.getElementById("discount-display").innerText = `${discount}%`;
+  const priceEl = document.getElementById("prod-price");
+  const sliderEl = document.getElementById("prod-discount");
+  const discountDisp = document.getElementById("discount-display");
+  const finalPriceDisp = document.getElementById("final-price-display");
 
-  const final = base * (1 - discount / 100);
-  document.getElementById("final-price-display").innerText =
-    `$${Math.round(final).toLocaleString("es-CO")}`;
+  const base = Number(priceEl ? priceEl.value : 0) || 0;
+  const discount = Number(sliderEl ? sliderEl.value : 0);
+
+  if (discountDisp) {
+    discountDisp.innerText = `${discount}%`;
+  }
+
+  const finalPrice = Math.max(0, Math.round(base * (1 - discount / 100)));
+  if (finalPriceDisp) {
+    finalPriceDisp.innerText = `$${finalPrice.toLocaleString("es-CO")}`;
+  }
 }
 
 // Mapeo Dinámico de Variantes
@@ -1205,9 +1263,10 @@ form.addEventListener("submit", (e) => {
     ? (existingProduct.isAvailable !== false && totalStock > 0)
     : (totalStock > 0);
 
+  // Preservar o asignar estado normativo 'activo' si hay existencias reales
   const preservedStatus = existingProduct
-    ? (totalStock > 0 && existingProduct.status !== "agotado" ? "disponible" : "agotado")
-    : (totalStock > 0 ? "disponible" : "agotado");
+    ? (totalStock > 0 && existingProduct.status !== "agotado" ? "activo" : "agotado")
+    : (totalStock > 0 ? "activo" : "agotado");
 
   const selectedCat = document.getElementById("prod-category").value;
   const selectedSubCat = document.getElementById("prod-subcategory")?.value || "Camisetas";

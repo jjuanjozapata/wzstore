@@ -50,9 +50,10 @@
     </style>
   </head>
   <body class="antialiased overflow-x-hidden">
-    <!-- 🔒 MODAL DE LOGIN (Bloqueo absoluto) -->
+
+    <!-- 🔒 OVERLAY DE LOGIN (Conforme a directiva de arquitectura WZSTORE) -->
     <div
-      id="login-modal"
+      id="wz-login-overlay"
       class="fixed inset-0 z-50 flex items-center justify-center bg-dark transition-opacity duration-300"
     >
       <div
@@ -487,7 +488,7 @@
                     >
                   </p>
                   <p class="text-[10px] text-slate-500 mt-1">
-                    Imágenes auto-optimizadas a 800px | MP4 hasta 3MB
+                    Imágenes auto-optimizadas a 800px | MP4 hasta 4MB
                   </p>
                 </div>
                 <!-- Miniaturas reactivas -->

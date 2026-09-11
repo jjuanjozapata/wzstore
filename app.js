@@ -17,11 +17,13 @@ const sanitizeInput = (str) => {
 let products = [];
 let cart = [];
 let uiState = {}; // Guarda estado del selector de color/talla por producto
-// Filtros iniciales con precio tope infinito para no bloquear productos
+
+
+// Estado inicial de filtros normalizado sin bloqueos de género
 let currentFilter = {
   text: '',
   category: 'all',
-  gender: 'ambos',
+  gender: 'todas', // 'todas' no bloquea prendas al arrancar
   size: 'all',
   sport: 'all',
   onlyOffers: false,
@@ -29,23 +31,27 @@ let currentFilter = {
   maxPrice: Infinity
 };
 
-// Gestión de cascada para categorías principales y revelación de género
+// Navegación en cascada reactiva al primer clic
 window.handleParentCategory = (categoryName) => {
   currentFilter.category = categoryName;
 
-  // Actualizar estilos activos de las píldoras de categoría
-  document.querySelectorAll(".cat-pill").forEach((btn) => {
+  // Actualizar inmediatamente clases activas de la botonera principal
+  const catPills = document.querySelectorAll(".cat-pill");
+  catPills.forEach((btn) => {
     btn.className = "cat-pill bg-slate-800 text-slate-300 hover:text-white px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all";
   });
 
-  const activeBtn = Array.from(document.querySelectorAll(".cat-pill")).find(
-    (btn) => btn.textContent.trim().toLowerCase() === (categoryName === 'all' ? 'todos' : categoryName.toLowerCase())
-  );
+  const activeBtn = Array.from(catPills).find((btn) => {
+    const btnText = btn.textContent.trim().toLowerCase();
+    const targetText = categoryName === "all" ? "todos" : categoryName.toLowerCase();
+    return btnText === targetText;
+  });
+
   if (activeBtn) {
     activeBtn.className = "cat-pill bg-emerald-500 text-black px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all";
   }
 
-  // Desplegar u ocultar selector secundario de género según la selección
+  // Mostrar panel de género si es una categoría que lo requiera
   const genderContainer = document.getElementById("gender-discriminator");
   if (genderContainer) {
     if (categoryName === "all" || categoryName.toLowerCase() === "accesorios") {
@@ -56,21 +62,21 @@ window.handleParentCategory = (categoryName) => {
     }
   }
 
-  // Reiniciar estado visual de los botones de género
+  // Resetear género a 'todas' sin disparar doble renderizado
   window.applyGenderFilter("todas", false);
   executeMasterFilters();
 };
 
-// Aplicación reactiva del filtro de género
+// Filtro secundario de género en cascada
 window.applyGenderFilter = (genderValue, shouldExecute = true) => {
-  currentFilter.gender = genderValue.toLowerCase();
+  currentFilter.gender = (genderValue || "todas").toLowerCase();
 
-  // Refrescar estilos activos de género
+  // Actualizar estilos activos de género al primer clic
   document.querySelectorAll(".gender-pill").forEach((btn) => {
     btn.className = "gender-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors";
   });
 
-  const activeGenderBtn = document.getElementById(`gender-btn-${genderValue.toLowerCase()}`);
+  const activeGenderBtn = document.getElementById(`gender-btn-${currentFilter.gender}`);
   if (activeGenderBtn) {
     activeGenderBtn.className = "gender-pill px-3 py-1 rounded-lg text-xs font-bold bg-emerald-500 text-black transition-colors";
   }
@@ -80,35 +86,42 @@ window.applyGenderFilter = (genderValue, shouldExecute = true) => {
   }
 };
 
-// Motor centralizado de filtrado que unifica categoría, género, texto y precio
+// Motor centralizado de filtrado tolerante y reactivo
 const executeMasterFilters = () => {
+  if (!Array.isArray(products) || products.length === 0) {
+    renderCatalog([]);
+    return;
+  }
+
   let result = [...products];
 
-  // Filtro de texto por nombre
-  if (currentFilter.text) {
-    result = result.filter((p) => p.name.toLowerCase().includes(currentFilter.text));
+  // 1. Filtro de búsqueda por texto
+  if (currentFilter.text && currentFilter.text.trim() !== '') {
+    const term = currentFilter.text.trim().toLowerCase();
+    result = result.filter((p) => p.name && p.name.toLowerCase().includes(term));
   }
 
-  // Filtro de categoría y subcategoría taxonómica sincronizado con el admin
-  if (currentFilter.category && currentFilter.category !== "all") {
+  // 2. Filtro de categoría y subcategoría
+  if (currentFilter.category && currentFilter.category !== 'all') {
     const filterCat = currentFilter.category.toLowerCase();
     result = result.filter((p) => {
-      const mainMatch = p.category?.toLowerCase() === filterCat;
-      const subMatch = p.subCategory?.toLowerCase() === filterCat;
-      const nameMatch = p.name?.toLowerCase().includes(filterCat);
-      return mainMatch || subMatch || nameMatch;
+      const catMatch = p.category && p.category.toLowerCase() === filterCat;
+      const subMatch = p.subCategory && p.subCategory.toLowerCase() === filterCat;
+      const nameMatch = p.name && p.name.toLowerCase().includes(filterCat);
+      return catMatch || subMatch || nameMatch;
     });
   }
 
-  // Filtro secundario de género en cascada
-  if (currentFilter.gender && currentFilter.gender !== "todas" && currentFilter.gender !== "ambos") {
+  // 3. Filtro de género (solo se aplica si es 'hombre' o 'mujer')
+  if (currentFilter.gender && currentFilter.gender !== 'todas' && currentFilter.gender !== 'ambos') {
+    const targetGender = currentFilter.gender.toLowerCase();
     result = result.filter((p) => {
-      const pGender = (p.gender || p.category || "").toLowerCase();
-      return pGender.includes(currentFilter.gender);
+      const pGender = (p.gender || p.category || '').toLowerCase();
+      return pGender.includes(targetGender);
     });
   }
 
-  // Filtro por precio tope
+  // 4. Filtro de precio tope
   if (currentFilter.maxPrice !== Infinity && !isNaN(currentFilter.maxPrice)) {
     result = result.filter((p) => {
       const price = p.isOffer ? p.priceOffer : p.priceRegular;
@@ -117,6 +130,54 @@ const executeMasterFilters = () => {
   }
 
   renderCatalog(result);
+};
+
+// Inicialización limpia e inmediata del catálogo sin pantallas en blanco
+const initApp = () => {
+  // Cargar productos desde cualquiera de las claves disponibles en localStorage
+  const rawProducts = localStorage.getItem("wz_core_products") || localStorage.getItem("wz_products");
+
+  if (!rawProducts) {
+    const initialData = typeof INITIAL_DATABASE !== "undefined" ? INITIAL_DATABASE : [];
+    products = initialData;
+    localStorage.setItem("wz_core_products", JSON.stringify(initialData));
+    localStorage.setItem("wz_products", JSON.stringify(initialData));
+  } else {
+    try {
+      products = JSON.parse(rawProducts);
+    } catch (e) {
+      products = typeof INITIAL_DATABASE !== "undefined" ? INITIAL_DATABASE : [];
+    }
+  }
+
+  // Cargar carrito local
+  const storedCart = localStorage.getItem("wz_cart");
+  if (storedCart) {
+    try {
+      cart = JSON.parse(storedCart);
+    } catch (e) {
+      cart = [];
+    }
+  }
+
+  // Inicializar estado UI para selección de color y talla
+  uiState = {};
+  products.forEach((p) => {
+    uiState[p.id] = { colorIdx: 0, sizeIdx: null };
+  });
+
+  // Renderizar Hero de producto destacado
+  if (typeof renderFeaturedHero === "function") {
+    renderFeaturedHero();
+  }
+
+  // Renderizado instantáneo de todas las prendas sin retardos artificiales
+  currentFilter.category = 'all';
+  currentFilter.gender = 'todas';
+  executeMasterFilters();
+
+  // Actualizar contador del carrito
+  updateCartUI();
 };
 
 // Enlace de compatibilidad con renderizado directo
@@ -164,30 +225,7 @@ const checkAbandonedCartReminder = () => {
   }
 };
 
-const initApp = () => {
-  const stored = localStorage.getItem("wz_core_products");
-  if (!stored) {
-    localStorage.setItem("wz_core_products", JSON.stringify(INITIAL_DATABASE));
-    products = INITIAL_DATABASE;
-  } else {
-    products = JSON.parse(stored);
-  }
 
-  // Cargar carrito local
-  const storedCart = localStorage.getItem("wz_cart");
-  if (storedCart) cart = JSON.parse(storedCart);
-
-  // Inicializar UI State
-  products.forEach((p) => {
-    uiState[p.id] = { colorIdx: 0, sizeIdx: null };
-  });
-
-  renderSkeleton();
-  renderFeaturedHero();
-  setTimeout(() => renderCatalog(), 600); // LCP optimization simulation
-  updateCartUI();
-  checkAbandonedCartReminder();
-};
 
 const setupEventListeners = () => {
   // Filtro de b squeda por texto reactivo

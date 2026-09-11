@@ -1008,78 +1008,115 @@ window.removeVariantColor = function (idx) {
 
 
 
-// Cargar producto para edición preservando identificadores y buffer multimedia
+// Unificación de carga de inventario soportando ambas claves de almacenamiento
+function loadProducts() {
+  const stored = localStorage.getItem("wz_core_products") || localStorage.getItem("wz_products");
+  try {
+    return stored ? JSON.parse(stored) : [];
+  } catch (err) {
+    console.error("Fallo al parsear inventario:", err);
+    return [];
+  }
+}
+
+// Persistencia sincronizada en ambas claves de almacenamiento
+function saveProducts(products) {
+  const json = JSON.stringify(products);
+  localStorage.setItem("wz_core_products", json);
+  localStorage.setItem("wz_products", json);
+}
+
+// Cargar producto en el formulario para edición sin pérdida de estado
 window.editProduct = function (id) {
   const products = loadProducts();
-  const p = products.find((x) => String(x.id) === String(id));
+  const targetIdStr = String(id);
+  const p = products.find((x) => String(x.id) === targetIdStr);
+
   if (!p) {
-    showToast("Error: No se encontró la prenda en la base de datos.", "error");
+    if (typeof showToast === "function") {
+      showToast("Error: No se encontró la prenda seleccionada.", "error");
+    } else {
+      alert("Error: Prenda no encontrada en el inventario.");
+    }
     return;
   }
 
-  // Fijación obligatoria del identificador en memoria y en el DOM
-  editingId = String(p.id);
+  // Establecer el ID de edición en memoria y en el input oculto
+  editingId = targetIdStr;
   const hiddenIdInput = document.getElementById("product-id");
   if (hiddenIdInput) {
-    hiddenIdInput.value = editingId;
+    hiddenIdInput.value = targetIdStr;
   }
 
-  // Asignación de datos al formulario
-  document.getElementById("crud-modal-title").innerText = "Editar Prenda Existente";
+  // Cargar información textual básica
+  document.getElementById("crud-modal-title").innerText = "Editar Prenda";
   document.getElementById("prod-name").value = p.name || "";
   document.getElementById("prod-desc").value = p.description || "";
-  
-  const mainCat = p.category || "hombre";
-  document.getElementById("prod-category").value = mainCat;
-  updateSubcategoryOptions(mainCat, p.subCategory);
+  document.getElementById("prod-price").value = p.priceRegular || 0;
 
+  // Cargar taxonomía (Categoría principal y subcategoría)
+  const mainCat = p.category || "hombre";
+  const catEl = document.getElementById("prod-category");
+  if (catEl) catEl.value = mainCat;
+
+  if (typeof updateSubcategoryOptions === "function") {
+    updateSubcategoryOptions(mainCat, p.subCategory || "");
+  }
+
+  // Cargar estado de oferta y calcular porcentaje real
+  const offerToggle = document.getElementById("prod-is-offer");
+  if (offerToggle) {
+    offerToggle.checked = Boolean(p.isOffer);
+    const offerControls = document.getElementById("offer-controls");
+    if (p.isOffer && p.priceRegular > 0) {
+      if (offerControls) offerControls.classList.remove("hidden");
+      const discountPercent = Math.max(1, Math.round((1 - (p.priceOffer || p.priceRegular) / p.priceRegular) * 100));
+      const discountInput = document.getElementById("prod-discount");
+      if (discountInput) discountInput.value = discountPercent;
+      calculateOfferPrice();
+    } else {
+      if (offerControls) offerControls.classList.add("hidden");
+    }
+  }
+
+  // Cargar estado de producto destacado en portada
   const featuredCheck = document.getElementById("prod-is-featured");
   if (featuredCheck) {
     featuredCheck.checked = Boolean(p.isFeatured);
   }
 
-  document.getElementById("prod-price").value = p.priceRegular || 0;
-
-  // Lógica reactiva de oferta y porcentaje
-  const offerToggle = document.getElementById("prod-is-offer");
-  offerToggle.checked = Boolean(p.isOffer);
-  if (p.isOffer && p.priceRegular > 0) {
-    document.getElementById("offer-controls").classList.remove("hidden");
-    const percent = Math.max(1, Math.round((1 - (p.priceOffer || p.priceRegular) / p.priceRegular) * 100));
-    document.getElementById("prod-discount").value = percent;
-    calculateOfferPrice();
-  } else {
-    document.getElementById("offer-controls").classList.add("hidden");
-  }
-
-  // Clonación profunda de variantes para evitar mutaciones directas en memoria
+  // Clonar profundamente las variantes existentes
   currentVariants = Array.isArray(p.variants) ? JSON.parse(JSON.stringify(p.variants)) : [];
   renderVariantsList();
 
-  // Restauración de recursos multimedia en el buffer temporal
-  const fallbackImages = Array.isArray(p.media?.images) && p.media.images.length > 0
-    ? [...p.media.images]
-    : (p.imageUrl ? [p.imageUrl] : []);
+  // Restaurar imágenes y video en el buffer multimedia
+  let existingImages = [];
+  if (Array.isArray(p.media?.images) && p.media.images.length > 0) {
+    existingImages = [...p.media.images];
+  } else if (p.imageUrl) {
+    existingImages = [p.imageUrl];
+  }
 
   mediaBuffer = {
-    images: [...fallbackImages],
+    images: existingImages,
     video: p.media?.video || ""
   };
 
+  // Forzar actualización visual de miniaturas de fotos/video cargados
   renderMediaPreviews();
   initMediaDropZone();
 
-  // Apertura controlada de la interfaz modal
+  // Desplegar el modal visualmente
   modal.classList.remove("hidden");
   setTimeout(() => modal.classList.remove("opacity-0"), 10);
 };
 
-// Procesamiento atómico del formulario: Actualización estricta vs Creación
+// Procesamiento atómico del formulario: Actualizar vs Crear producto
 form.addEventListener("submit", (e) => {
   e.preventDefault();
 
   if (!currentVariants || currentVariants.length === 0) {
-    showToast("Debes registrar al menos una variante de talle/stock.", "error");
+    alert("Debes agregar al menos una variante (Color/Talla/Stock) para listar el producto.");
     return;
   }
 
@@ -1087,16 +1124,16 @@ form.addEventListener("submit", (e) => {
   const isOffer = document.getElementById("prod-is-offer").checked;
   const discount = Number(document.getElementById("prod-discount").value) || 0;
   const priceOff = isOffer ? Math.round(priceReg * (1 - discount / 100)) : priceReg;
-  
-  // Resolución determinante del ID de registro
+
+  // Resolver ID verificando tanto la variable en memoria como el campo oculto
   const hiddenIdVal = document.getElementById("product-id")?.value;
   const resolvedTargetId = editingId ? String(editingId) : (hiddenIdVal ? String(hiddenIdVal) : null);
 
   let products = loadProducts();
-  const existingProductIndex = resolvedTargetId ? products.findIndex((p) => String(p.id) === resolvedTargetId) : -1;
-  const existingProduct = existingProductIndex > -1 ? products[existingProductIndex] : null;
+  const existingIndex = resolvedTargetId ? products.findIndex((p) => String(p.id) === resolvedTargetId) : -1;
+  const existingProduct = existingIndex > -1 ? products[existingIndex] : null;
 
-  // Consolidación de multimedia: conservar previas si no hay nuevas
+  // Preservar multimedia existente si no se agregaron imágenes nuevas en esta edición
   let finalImages = [];
   if (mediaBuffer.images && mediaBuffer.images.length > 0) {
     finalImages = [...mediaBuffer.images];
@@ -1110,13 +1147,13 @@ form.addEventListener("submit", (e) => {
 
   const finalVideo = mediaBuffer.video !== "" ? mediaBuffer.video : (existingProduct?.media?.video || "");
 
-  // Sumatoria física del stock declarado
+  // Calcular stock físico sumando todas las tallas
   let totalStock = 0;
   currentVariants.forEach((v) => {
     v.sizes?.forEach((s) => (totalStock += Number(s.stock) || 0));
   });
 
-  // Preservación estricta de estado de stock y apagador de producto
+  // Preservar estado lógico de disponibilidad
   const preservedAvailable = existingProduct
     ? (existingProduct.isAvailable !== false && totalStock > 0)
     : (totalStock > 0);
@@ -1129,7 +1166,7 @@ form.addEventListener("submit", (e) => {
   const selectedSubCat = document.getElementById("prod-subcategory")?.value || "Camisetas";
   const isFeaturedTrend = document.getElementById("prod-is-featured")?.checked || false;
 
-  // Unicidad de producto destacado: apagar flag en los demás si este está activo
+  // Si se activa este producto como destacado, desmarcar todos los demás
   if (isFeaturedTrend) {
     products.forEach((prod) => {
       if (String(prod.id) !== resolvedTargetId) {
@@ -1138,7 +1175,7 @@ form.addEventListener("submit", (e) => {
     });
   }
 
-  // Construcción del DTO sanitizado
+  // Construir objeto limpio del producto
   const productData = {
     id: resolvedTargetId ? resolvedTargetId : "wz-" + Date.now(),
     name: sanitizeInput(document.getElementById("prod-name").value),
@@ -1148,7 +1185,7 @@ form.addEventListener("submit", (e) => {
     isFeatured: isFeaturedTrend,
     media: {
       images: finalImages,
-      video: finalVideo,
+      video: finalVideo
     },
     imageUrl: finalImages[0],
     priceRegular: priceReg,
@@ -1156,28 +1193,34 @@ form.addEventListener("submit", (e) => {
     priceOffer: priceOff,
     isAvailable: preservedAvailable,
     status: preservedStatus,
-    variants: currentVariants,
+    variants: currentVariants
   };
 
-  // Mutación en el array en memoria
-  if (existingProductIndex > -1) {
-    products[existingProductIndex] = { ...products[existingProductIndex], ...productData };
-    showToast("Prenda actualizada correctamente.");
+  // Reemplazar elemento existente o insertar nuevo sin duplicar
+  if (existingIndex > -1) {
+    products[existingIndex] = { ...products[existingIndex], ...productData };
   } else {
     products.push(productData);
-    showToast("Nueva prenda ingresada al catálogo.");
   }
 
-  // Persistencia y reseteo absoluto de variables de estado
+  // Guardar en localStorage
   saveProducts(products);
+
+  // Limpiar estrictamente el estado y el formulario
   editingId = null;
   const hiddenInput = document.getElementById("product-id");
   if (hiddenInput) hiddenInput.value = "";
+  form.reset();
+  currentVariants = [];
+  mediaBuffer = { images: [], video: "" };
 
   closeModal();
-  mediaBuffer = { images: [], video: "" };
   renderMediaPreviews();
   renderInventoryTable();
+
+  if (typeof showToast === "function") {
+    showToast(existingIndex > -1 ? "Prenda actualizada exitosamente." : "Prenda guardada en el catálogo.");
+  }
 });
 
 

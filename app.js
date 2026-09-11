@@ -136,32 +136,68 @@ const executeMasterFilters = () => {
   renderCatalog(result);
 };
 
-// Inicialización limpia e inmediata del catálogo sin pantallas en blanco
+// Capa de persistencia resiliente compatible con Safari Private Browsing y cuotas bloqueadas
+const memoryFallbackStore = {};
+
+const safeStorage = {
+  getItem: (key) => {
+    try {
+      return window.localStorage ? window.localStorage.getItem(key) : (memoryFallbackStore[key] || null);
+    } catch (e) {
+      return memoryFallbackStore[key] || null;
+    }
+  },
+  setItem: (key, value) => {
+    try {
+      if (window.localStorage) {
+        window.localStorage.setItem(key, value);
+      }
+      memoryFallbackStore[key] = String(value);
+    } catch (e) {
+      memoryFallbackStore[key] = String(value);
+    }
+  },
+  removeItem: (key) => {
+    try {
+      if (window.localStorage) window.localStorage.removeItem(key);
+      delete memoryFallbackStore[key];
+    } catch (e) {
+      delete memoryFallbackStore[key];
+    }
+  }
+};
+
+// Inicialización blindada contra fallos de almacenamiento o datos corruptos
 const initApp = () => {
-  // Cargar productos desde cualquiera de las claves disponibles en localStorage
-  const rawProducts = localStorage.getItem("wz_core_products") || localStorage.getItem("wz_products");
+  const rawProducts = safeStorage.getItem("wz_core_products") || safeStorage.getItem("wz_products");
 
   if (!rawProducts) {
-    const initialData = typeof INITIAL_DATABASE !== "undefined" ? INITIAL_DATABASE : [];
+    const initialData = (typeof INITIAL_DATABASE !== "undefined" && Array.isArray(INITIAL_DATABASE))
+      ? INITIAL_DATABASE
+      : [];
     products = initialData;
-    localStorage.setItem("wz_core_products", JSON.stringify(initialData));
-    localStorage.setItem("wz_products", JSON.stringify(initialData));
+    safeStorage.setItem("wz_core_products", JSON.stringify(initialData));
+    safeStorage.setItem("wz_products", JSON.stringify(initialData));
   } else {
     try {
-      products = JSON.parse(rawProducts);
+      const parsed = JSON.parse(rawProducts);
+      products = Array.isArray(parsed) && parsed.length > 0 ? parsed : (INITIAL_DATABASE || []);
     } catch (e) {
-      products = typeof INITIAL_DATABASE !== "undefined" ? INITIAL_DATABASE : [];
+      products = (typeof INITIAL_DATABASE !== "undefined" && Array.isArray(INITIAL_DATABASE)) ? INITIAL_DATABASE : [];
     }
   }
 
-  // Cargar carrito local
-  const storedCart = localStorage.getItem("wz_cart");
+  // Cargar estado del carrito protegiendo integridad de tipos
+  const storedCart = safeStorage.getItem("wz_cart");
   if (storedCart) {
     try {
-      cart = JSON.parse(storedCart);
+      const parsedCart = JSON.parse(storedCart);
+      cart = Array.isArray(parsedCart) ? parsedCart : [];
     } catch (e) {
       cart = [];
     }
+  } else {
+    cart = [];
   }
 
   // Inicializar estado UI para selección de color y talla
@@ -170,17 +206,13 @@ const initApp = () => {
     uiState[p.id] = { colorIdx: 0, sizeIdx: null };
   });
 
-  // Renderizar Hero de producto destacado
   if (typeof renderFeaturedHero === "function") {
     renderFeaturedHero();
   }
 
-  // Renderizado instantáneo de todas las prendas sin retardos artificiales
   currentFilter.category = 'all';
   currentFilter.gender = 'todas';
   executeMasterFilters();
-
-  // Actualizar contador del carrito
   updateCartUI();
 };
 
@@ -192,10 +224,27 @@ let appliedCoupon = null; // 'WZ2026' | 'FREEATHLETE'
 let shippingType = "local"; // 'local' | 'nacional'
 const SHIP_RATES = { local: 5000, nacional: 20000 };
 
+// Arrancar al cargar la vista con soporte Sticky Mobile y Media Observers
 document.addEventListener("DOMContentLoaded", () => {
   initApp();
   recoverCartFromUrl();
   setupEventListeners();
+  initMobileVideoObserver();
+
+  // Despliegue inteligente del Sticky Bar en móviles según umbral de scroll
+  const stickyBar = document.getElementById("wz-sticky-bar");
+  if (stickyBar) {
+    let lastScrollY = window.scrollY;
+    window.addEventListener("scroll", () => {
+      const currentScrollY = window.scrollY;
+      if (currentScrollY > 280) {
+        stickyBar.classList.remove("translate-y-full");
+      } else {
+        stickyBar.classList.add("translate-y-full");
+      }
+      lastScrollY = currentScrollY;
+    }, { passive: true });
+  }
 });
 
 // Detector pasivo de carritos abandonados con cupón de incentivo
@@ -460,8 +509,27 @@ const renderCatalog = (catalogData = null) => {
         })
         .join("");
 
+      // Análisis de escasez para badges de urgencia (CRO / FOMO)
+      let scarcityBadgeHtml = "";
+      if (!isAgotado) {
+        if (totalStock <= 3 && totalStock > 0) {
+          scarcityBadgeHtml = `
+            <span class="absolute top-3 left-3 z-10 bg-amber-500 text-black text-[10px] font-black uppercase px-2.5 py-1 rounded-md shadow-lg shadow-amber-500/20 tracking-wider flex items-center gap-1">
+              ⚡ ¡ÚLTIMAS ${totalStock} UDS!
+            </span>
+          `;
+        } else if (p.badge) {
+          scarcityBadgeHtml = `
+            <span class="absolute top-3 left-3 z-10 bg-emerald-500 text-black text-[10px] font-black uppercase px-2.5 py-1 rounded-md shadow-lg tracking-wider">
+              ${p.badge}
+            </span>
+          `;
+        }
+      }
+
       return `
     <div class="relative bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col group transition-all duration-300 ${isAgotado ? 'opacity-60 grayscale' : ''}">
+      ${scarcityBadgeHtml}
       ${
         isAgotado
           ? `
@@ -474,7 +542,7 @@ const renderCatalog = (catalogData = null) => {
       `
           : ""
       }
-      <div class="relative h-64 bg-slate-950 overflow-hidden" onmouseenter="${!isAgotado ? `playProductVideo(this, '${p.id}')` : ''}" onmouseleave="${!isAgotado ? `stopProductVideo(this, '${p.id}')` : ''}">
+      <div class="product-media-container relative h-64 bg-slate-950 overflow-hidden" onmouseenter="${!isAgotado ? `playProductVideo(this, '${p.id}')` : ''}" onmouseleave="${!isAgotado ? `stopProductVideo(this, '${p.id}')` : ''}">
         <img src="${p.imageUrl || (p.media?.images && p.media.images[0]) || 'https://images.unsplash.com/photo-1581636625402-29f2a01222ce'}" alt="${p.name}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy">
       </div>
       <div class="p-4 flex flex-col flex-grow">
@@ -558,8 +626,27 @@ window.addToCart = (productId) => {
   openDrawer();
 };
 
+// Guardado ultra liviano del carrito: disocia imágenes Base64 para prevenir QuotaExceededError
 const saveCart = () => {
-  localStorage.setItem("wz_cart", JSON.stringify(cart));
+  try {
+    // Almacenar únicamente los atributos esenciales de la orden
+    const lightweightPayload = cart.map((item) => ({
+      id: item.id,
+      color: item.color,
+      size: item.size,
+      qty: item.qty
+    }));
+
+    safeStorage.setItem("wz_cart", JSON.stringify(lightweightPayload));
+  } catch (err) {
+    console.error("Fallo al persistir carrito en almacenamiento local:", err);
+    if (err.name === "QuotaExceededError" || err.code === 22) {
+      showNotificationModal(
+        "Límite de Memoria",
+        "Tu navegador tiene la memoria local llena. Te recomendamos finalizar tu pedido por WhatsApp para no perder los artículos seleccionados."
+      );
+    }
+  }
 };
 
 const removeCartItem = (index) => {
@@ -632,19 +719,41 @@ const updateCartUI = () => {
     discount = Math.round(subtotal * 0.10);
   }
 
-  let shippingCost = SHIP_RATES[shippingType];
-  if (subtotal > 300000 || appliedCoupon === "FREEATHLETE") shippingCost = 0;
+  const FREE_SHIPPING_THRESHOLD = 300000;
+  let shippingCost = SHIP_RATES[shippingType] || 5000;
+  const isFreeByThreshold = subtotal >= FREE_SHIPPING_THRESHOLD;
 
-  const finalTotal = subtotal - discount + shippingCost;
+  if (isFreeByThreshold || appliedCoupon === "FREEATHLETE") {
+    shippingCost = 0;
+  }
 
-  document.getElementById("subtotal-val").textContent =
-    `$${subtotal.toLocaleString()}`;
-  document.getElementById("discount-val").textContent =
-    `-$${discount.toLocaleString()}`;
-  document.getElementById("shipping-val").textContent =
-    shippingCost === 0 ? "¡GRATIS!" : `$${shippingCost.toLocaleString()}`;
-  document.getElementById("total-val").textContent =
-    `$${finalTotal.toLocaleString()}`;
+  // Actualización reactiva de la barra de progreso de envío gratuito
+  const progressTextEl = document.getElementById("wz-shipping-progress-text");
+  const progressPctEl = document.getElementById("wz-shipping-progress-pct");
+  const progressBarEl = document.getElementById("wz-shipping-progress-bar");
+
+  if (progressTextEl && progressPctEl && progressBarEl) {
+    if (isFreeByThreshold || appliedCoupon === "FREEATHLETE") {
+      progressTextEl.innerHTML = `🎉 <span class="text-emerald-400 font-black">¡ENVÍO GRATUITO ACREDITADO!</span>`;
+      progressPctEl.textContent = "100%";
+      progressBarEl.style.width = "100%";
+      progressBarEl.classList.add("shadow-[0_0_12px_rgba(52,211,153,0.6)]");
+    } else {
+      const remainingForFree = FREE_SHIPPING_THRESHOLD - subtotal;
+      const pct = Math.min(100, Math.round((subtotal / FREE_SHIPPING_THRESHOLD) * 100));
+      progressTextEl.innerHTML = `Agrega <strong class="text-emerald-400 font-bold">$${remainingForFree.toLocaleString("es-CO")} COP</strong> para flete gratis`;
+      progressPctEl.textContent = `${pct}%`;
+      progressBarEl.style.width = `${pct}%`;
+      progressBarEl.classList.remove("shadow-[0_0_12px_rgba(52,211,153,0.6)]");
+    }
+  }
+
+  const finalTotal = Math.max(0, subtotal - discount + shippingCost);
+
+  document.getElementById("subtotal-val").textContent = `$${subtotal.toLocaleString("es-CO")}`;
+  document.getElementById("discount-val").textContent = `-$${discount.toLocaleString("es-CO")}`;
+  document.getElementById("shipping-val").textContent = shippingCost === 0 ? "¡GRATIS!" : `$${shippingCost.toLocaleString("es-CO")}`;
+  document.getElementById("total-val").textContent = `$${finalTotal.toLocaleString("es-CO")}`;
   document.getElementById("final-buy-btn").dataset.total = finalTotal;
 };
 
@@ -677,42 +786,77 @@ const shareCartUrl = () => {
   }
 };
 
-// Deserialización y validación estricta de esquema para mitigar DOM-XSS vía URL
+// Reconstrucción segura del carrito cruzando contra el catálogo canónico (Anti DOM-XSS & Anti Tampering)
 const recoverCartFromUrl = () => {
   const params = new URLSearchParams(window.location.search);
   const cartParam = params.get("cart");
   if (!cartParam) return;
 
   try {
-    const rawJson = decodeURIComponent(escape(atob(cartParam)));
-    const parsed = JSON.parse(rawJson);
+    // Decodificación segura de Base64 UTF-8 sin fuga de memoria
+    const binaryStr = atob(cartParam.replace(/\s/g, ""));
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) {
+      bytes[i] = binaryStr.charCodeAt(i);
+    }
+    const decodedJson = new TextDecoder().decode(bytes);
+    const parsed = JSON.parse(decodedJson);
 
-    if (!Array.isArray(parsed)) throw new Error("Estructura inválida");
+    if (!Array.isArray(parsed)) throw new Error("Estructura de carrito no válida");
 
-    // Whitelist y sanitización rigurosa de cada ítem importado
-    const sanitizedCart = parsed.map((item) => ({
-      id: String(item.id || "").replace(/[^a-zA-Z0-9_-]/g, ""),
-      name: sanitizeInput(String(item.name || "")),
-      color: sanitizeInput(String(item.color || "")),
-      size: sanitizeInput(String(item.size || "")),
-      price: Math.abs(Number(item.price)) || 0,
-      priceRegular: Math.abs(Number(item.priceRegular)) || 0,
-      qty: Math.max(1, Math.min(Number(item.qty) || 1, 50)),
-      maxStock: Number(item.maxStock) || 99,
-      img: (typeof item.img === "string" && (item.img.startsWith("http://") || item.img.startsWith("https://") || item.img.startsWith("data:image/")))
-        ? item.img
-        : "https://images.unsplash.com/photo-1581636625402-29f2a01222ce"
-    })).filter((item) => item.id !== "" && item.name !== "");
+    const validatedCart = [];
 
-    if (sanitizedCart.length > 0) {
-      cart = sanitizedCart;
+    parsed.forEach((incomingItem) => {
+      const cleanId = String(incomingItem.id || "").replace(/[^a-zA-Z0-9_-]/g, "");
+      const authenticProduct = products.find((p) => String(p.id) === cleanId);
+
+      // Si el producto no existe o está agotado en catálogo, se descarta
+      if (!authenticProduct || authenticProduct.status === "agotado" || authenticProduct.isAvailable === false) {
+        return;
+      }
+
+      // Validar coincidencia de variante de color
+      const incomingColor = sanitizeInput(String(incomingItem.color || ""));
+      const matchedVariant = authenticProduct.variants?.find(
+        (v) => v.color.toLowerCase() === incomingColor.toLowerCase()
+      ) || authenticProduct.variants?.[0];
+
+      if (!matchedVariant) return;
+
+      // Validar coincidencia de talla y stock físico disponible
+      const incomingSize = sanitizeInput(String(incomingItem.size || "")).toUpperCase();
+      const matchedSizeObj = matchedVariant.sizes?.find((s) => s.size === incomingSize);
+
+      if (!matchedSizeObj || matchedSizeObj.stock <= 0) return;
+
+      // Imponer precio oficial del inventario local (inmunidad contra alteración de precios)
+      const officialPrice = authenticProduct.isOffer ? authenticProduct.priceOffer : authenticProduct.priceRegular;
+      const verifiedQty = Math.max(1, Math.min(Math.floor(Number(incomingItem.qty) || 1), matchedSizeObj.stock));
+
+      validatedCart.push({
+        id: authenticProduct.id,
+        name: authenticProduct.name,
+        color: matchedVariant.color,
+        size: matchedSizeObj.size,
+        price: officialPrice,
+        priceRegular: authenticProduct.priceRegular,
+        qty: verifiedQty,
+        maxStock: matchedSizeObj.stock,
+        img: authenticProduct.imageUrl || (authenticProduct.media?.images && authenticProduct.media.images[0]) || "https://images.unsplash.com/photo-1581636625402-29f2a01222ce"
+      });
+    });
+
+    if (validatedCart.length > 0) {
+      cart = validatedCart;
       saveCart();
-      window.history.replaceState({}, document.title, window.location.pathname);
       updateCartUI();
       openDrawer();
+      showNotificationModal("Carrito Importado", "Se cargaron tus prendas verificando existencias y precios oficiales.");
     }
-  } catch (e) {
-    console.warn("Bloqueo de seguridad: El parámetro ?cart= no cumple con los estándares criptográficos o de esquema.");
+  } catch (err) {
+    console.warn("Bloqueo de seguridad: El payload del carrito en la URL fue rechazado.", err);
+  } finally {
+    // Limpiar la barra de navegación para evitar reejecuciones
     window.history.replaceState({}, document.title, window.location.pathname);
   }
 };
@@ -724,37 +868,44 @@ const processCheckout = () => {
     return;
   }
 
-  const firstName = sanitizeInput(document.getElementById("chk-firstname")?.value.trim() || "");
-  const lastName = sanitizeInput(document.getElementById("chk-lastname")?.value.trim() || "");
-  const phone = sanitizeInput(document.getElementById("chk-phone")?.value.trim() || "");
-  const city = sanitizeInput(document.getElementById("chk-city")?.value.trim() || "");
-  const postal = sanitizeInput(document.getElementById("chk-postal")?.value.trim() || "");
-  const addr = sanitizeInput(document.getElementById("chk-addr")?.value.trim() || "");
-  const extraAddr = sanitizeInput(document.getElementById("chk-extra-addr")?.value.trim() || "");
+  // Sanitización y depuración estricta de campos críticos
+  const rawFirstName = document.getElementById("chk-firstname")?.value || "";
+  const rawLastName = document.getElementById("chk-lastname")?.value || "";
+  const rawPhone = document.getElementById("chk-phone")?.value || "";
+  const rawCity = document.getElementById("chk-city")?.value || "";
+  const rawPostal = document.getElementById("chk-postal")?.value || "";
+  const rawAddr = document.getElementById("chk-addr")?.value || "";
+  const rawExtraAddr = document.getElementById("chk-extra-addr")?.value || "";
   const paymentMethod = document.getElementById("chk-payment-method")?.value || "Transferencia Bancaria";
 
-  const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{2,}$/;
-  const phoneRegex = /^\d{7,15}$/;
+  // Normalización: remueve caracteres de control que quiebren encodeURIComponent
+  const cleanText = (str) => str.replace(/[\u0000-\u001F\u007F-\u009F]/g, "").trim();
 
-  // Reglas de validación
-  if (!nameRegex.test(firstName)) {
-    showNotificationModal("Datos Incompletos", "Por favor ingresa un nombre válido (solo letras).");
+  const firstName = cleanText(rawFirstName);
+  const lastName = cleanText(rawLastName);
+  // Extraer exclusivamente dígitos para la línea telefónica
+  const phone = rawPhone.replace(/\D/g, "");
+  const city = cleanText(rawCity);
+  const postal = cleanText(rawPostal).replace(/[^a-zA-Z0-9-]/g, "");
+  const addr = cleanText(rawAddr);
+  const extraAddr = cleanText(rawExtraAddr);
+
+  const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{2,40}$/;
+
+  if (!nameRegex.test(firstName) || !nameRegex.test(lastName)) {
+    showNotificationModal("Datos Inválidos", "Por favor ingresa nombres y apellidos válidos (solo letras sin caracteres especiales).");
     return;
   }
-  if (!nameRegex.test(lastName)) {
-    showNotificationModal("Datos Incompletos", "Por favor ingresa un apellido válido (solo letras).");
-    return;
-  }
-  if (!phoneRegex.test(phone)) {
+  if (phone.length < 7 || phone.length > 15) {
     showNotificationModal("Teléfono Inválido", "Ingresa un número telefónico válido de entre 7 y 15 dígitos.");
     return;
   }
   if (!city && !postal) {
-    showNotificationModal("Ubicación Requerida", "Debes especificar la Ciudad o, en su defecto, el Código Postal.");
+    showNotificationModal("Ubicación Requerida", "Debes especificar la Ciudad o el Código Postal.");
     return;
   }
-  if (!addr) {
-    showNotificationModal("Dirección Requerida", "Por favor especifica la dirección de entrega.");
+  if (addr.length < 5) {
+    showNotificationModal("Dirección Incompleta", "Por favor especifica una dirección de entrega válida.");
     return;
   }
 
@@ -855,44 +1006,83 @@ const processCheckout = () => {
 
 
 // ==========================================
-// CONTROL DE VIDEO STREAMING EN HOVER
+// REPRODUCTOR STREAMING RESPONSIVE (DESKTOP HOVER & MOBILE INTERSECTION OBSERVER)
 // ==========================================
-// Reproducción de video bajo demanda con control eficiente de ciclo de vida
+let mobileVideoObserver = null;
+
+const initMobileVideoObserver = () => {
+  if (mobileVideoObserver) mobileVideoObserver.disconnect();
+
+  // Solo se activa en pantallas táctiles o con ancho móvil (< 1024px)
+  if (window.innerWidth >= 1024) return;
+
+  mobileVideoObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        const video = entry.target.querySelector("video");
+        const img = entry.target.querySelector("img");
+        if (!video) return;
+
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.7) {
+          if (img) img.classList.add("hidden");
+          video.classList.remove("hidden", "opacity-0");
+          video.play().catch(() => {});
+        } else {
+          video.pause();
+          video.classList.add("opacity-0", "hidden");
+          if (img) img.classList.remove("hidden");
+        }
+      });
+    },
+    { threshold: [0, 0.7] }
+  );
+
+  document.querySelectorAll(".product-media-container").forEach((el) => {
+    mobileVideoObserver.observe(el);
+  });
+};
+
+window.addEventListener("resize", initMobileVideoObserver);
+
 window.playProductVideo = (container, productId) => {
+  // En pantallas táctiles móviles el IntersectionObserver gestiona la reproducción
+  if (window.innerWidth < 1024) return;
+
   const prod = products.find((p) => String(p.id) === String(productId));
   if (!prod?.media?.video) return;
 
-  const img = container.querySelector('img');
-  let video = container.querySelector('video');
+  const img = container.querySelector("img");
+  let video = container.querySelector("video");
 
   if (!video) {
-    video = document.createElement('video');
+    video = document.createElement("video");
     video.src = prod.media.video;
     video.muted = true;
     video.loop = true;
     video.playsInline = true;
-    video.preload = "auto";
+    video.preload = "metadata";
     video.className = "w-full h-full object-cover transition-opacity duration-300 opacity-0";
     container.appendChild(video);
   }
 
-  if (img) img.classList.add('hidden');
-  video.classList.remove('hidden');
-  setTimeout(() => video.classList.remove('opacity-0'), 20);
+  if (img) img.classList.add("hidden");
+  video.classList.remove("hidden");
+  setTimeout(() => video.classList.remove("opacity-0"), 20);
   video.play().catch(() => {});
 };
 
-// Detención y liberación del buffer de video para prevenir fugas de memoria
 window.stopProductVideo = (container) => {
-  const img = container.querySelector('img');
-  const video = container.querySelector('video');
+  if (window.innerWidth < 1024) return;
+
+  const img = container.querySelector("img");
+  const video = container.querySelector("video");
   if (video) {
     video.pause();
     video.currentTime = 0;
-    video.classList.add('opacity-0', 'hidden');
+    video.classList.add("opacity-0", "hidden");
   }
   if (img) {
-    img.classList.remove('hidden');
+    img.classList.remove("hidden");
   }
 };
 

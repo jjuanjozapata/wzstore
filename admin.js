@@ -160,22 +160,71 @@ const initializeUsersStore = () => {
   }
 };
 
-// Validación de credenciales con control de tasa y defensa contra fuerza bruta
-document.getElementById("login-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
+// Algoritmo de bloqueo por fuerza bruta (3 intentos, 5 minutos de suspensión con cuenta regresiva)
+const LOCKOUT_KEY = "wz_admin_lockout";
+let lockoutInterval = null;
 
-  const LOCKOUT_KEY = "wz_admin_lockout";
+const applyLockoutUI = (secondsRemaining) => {
+  const submitBtn = document.querySelector("#login-form button[type='submit']");
+  const errorEl = document.getElementById("login-error");
+  if (!submitBtn || !errorEl) return;
+
+  submitBtn.disabled = true;
+  submitBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-gray-600");
+  submitBtn.classList.remove("bg-neon", "hover:bg-green-400");
+  submitBtn.innerText = `Bloqueado (${secondsRemaining}s)`;
+
+  errorEl.textContent = `Demasiados intentos fallidos. Panel bloqueado por seguridad: ${secondsRemaining} segundos restantes.`;
+  errorEl.classList.remove("hidden");
+};
+
+const releaseLockoutUI = () => {
+  const submitBtn = document.querySelector("#login-form button[type='submit']");
+  const errorEl = document.getElementById("login-error");
+  if (!submitBtn || !errorEl) return;
+
+  clearInterval(lockoutInterval);
+  lockoutInterval = null;
+  submitBtn.disabled = false;
+  submitBtn.classList.remove("opacity-50", "cursor-not-allowed", "bg-gray-600");
+  submitBtn.classList.add("bg-neon", "hover:bg-green-400");
+  submitBtn.innerText = "Desbloquear Panel";
+  errorEl.classList.add("hidden");
+  localStorage.removeItem(LOCKOUT_KEY);
+};
+
+const checkExistingLockout = () => {
   const lockoutState = JSON.parse(localStorage.getItem(LOCKOUT_KEY) || '{"attempts": 0, "lockedUntil": 0}');
   const now = Date.now();
 
-  // Comprobación de ventana de bloqueo activa
   if (lockoutState.lockedUntil > now) {
-    const remainingSecs = Math.ceil((lockoutState.lockedUntil - now) / 1000);
-    const errorEl = document.getElementById("login-error");
-    errorEl.textContent = `Panel bloqueado temporalmente por seguridad. Reintenta en ${remainingSecs}s.`;
-    errorEl.classList.remove("hidden");
-    return;
+    let remaining = Math.ceil((lockoutState.lockedUntil - now) / 1000);
+    applyLockoutUI(remaining);
+
+    if (lockoutInterval) clearInterval(lockoutInterval);
+    lockoutInterval = setInterval(() => {
+      remaining--;
+      if (remaining <= 0) {
+        releaseLockoutUI();
+      } else {
+        applyLockoutUI(remaining);
+      }
+    }, 1000);
+    return true;
   }
+  return false;
+};
+
+// Verificar estado de bloqueo inmediatamente al renderizar
+document.addEventListener("DOMContentLoaded", checkExistingLockout);
+
+document.getElementById("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  if (checkExistingLockout()) return;
+
+  const lockoutState = JSON.parse(localStorage.getItem(LOCKOUT_KEY) || '{"attempts": 0, "lockedUntil": 0}');
+  const now = Date.now();
 
   const u = document.getElementById("username").value.trim().toLowerCase();
   const p = document.getElementById("password").value;
@@ -188,7 +237,6 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
   );
 
   if (matchedUser) {
-    // Si la cuenta estaba en texto plano legado, migrarla a hash
     if (!matchedUser.passwordHash) {
       matchedUser.passwordHash = incomingHash;
       delete matchedUser.password;
@@ -209,17 +257,22 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
     document.getElementById("password").value = "";
     checkAuth();
   } else {
-    // Registro de intento fallido e imposición de bloqueo tras 3 intentos
     lockoutState.attempts = (lockoutState.attempts || 0) + 1;
+
+    // Bloqueo tras 3 intentos fallidos por exactamente 5 minutos (300.000 ms)
     if (lockoutState.attempts >= 3) {
-      lockoutState.lockedUntil = now + (15 * 60 * 1000); // 15 minutos
+      const lockDurationMs = 5 * 60 * 1000;
+      lockoutState.lockedUntil = now + lockDurationMs;
       lockoutState.attempts = 0;
-      document.getElementById("login-error").textContent = "Demasiados fallos. Acceso bloqueado durante 15 minutos.";
+      localStorage.setItem(LOCKOUT_KEY, JSON.stringify(lockoutState));
+      checkExistingLockout();
     } else {
-      document.getElementById("login-error").textContent = `Credenciales inválidas. Te quedan ${3 - lockoutState.attempts} intentos.`;
+      localStorage.setItem(LOCKOUT_KEY, JSON.stringify(lockoutState));
+      const remainingAttempts = 3 - lockoutState.attempts;
+      const errorEl = document.getElementById("login-error");
+      errorEl.textContent = `Credenciales inválidas. Intentos restantes: ${remainingAttempts}.`;
+      errorEl.classList.remove("hidden");
     }
-    localStorage.setItem(LOCKOUT_KEY, JSON.stringify(lockoutState));
-    document.getElementById("login-error").classList.remove("hidden");
   }
 });
 

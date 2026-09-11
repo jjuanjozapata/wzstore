@@ -15,10 +15,10 @@
     />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Directiva Content Security Policy configurada para ecosistema WhatsApp y Assets -->
+    <!-- Content Security Policy (CSP) nivel bancario y hardening contra vectores XSS y Clickjacking -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://images.unsplash.com; media-src 'self' data: blob:; connect-src 'self' https://wa.me https://api.whatsapp.com https://web.whatsapp.com; frame-src https://wa.me https://api.whatsapp.com https://web.whatsapp.com;"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://images.unsplash.com https://jjuanjozapata.github.io; media-src 'self' data: blob:; connect-src 'self' https://wa.me https://api.whatsapp.com https://web.whatsapp.com; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://wa.me https://api.whatsapp.com;"
     />
     <!-- Título estricto para snippet de Google SERP sin sufijos adicionales -->
     <title>WZSTORE</title>
@@ -530,6 +530,21 @@
       <div id="cart-items" class="p-4 flex-1 overflow-y-auto"></div>
 
       <div id="cart-totals" class="p-4 bg-[#0a0d14] border-t border-[#1e293b]">
+        <!-- Barra de Progreso Dinámica de Envío Gratis (Threshold: $300.000 COP) -->
+        <div class="mb-4 bg-[#111726] border border-slate-800 p-3 rounded-xl">
+          <div class="flex justify-between items-center text-xs mb-1.5 font-bold">
+            <span id="wz-shipping-progress-text" class="text-slate-300">Calculando flete...</span>
+            <span id="wz-shipping-progress-pct" class="text-emerald-400">0%</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+            <div
+              id="wz-shipping-progress-bar"
+              class="bg-gradient-to-r from-emerald-500 to-green-400 h-2 rounded-full transition-all duration-500 ease-out"
+              style="width: 0%"
+            ></div>
+          </div>
+        </div>
+
         <div class="flex gap-2 mb-3">
           <input
             type="text"
@@ -744,6 +759,28 @@
       </svg>
       <span class="hidden sm:inline">Soporte WZ</span>
     </button>
+
+    <!-- BARRA FLOTANTE STICKY DE COMPRA RÁPIDA PARA MÓVILES -->
+    <div
+      id="wz-sticky-bar"
+      class="fixed bottom-0 left-0 right-0 z-40 bg-[#0c121e]/95 backdrop-blur-lg border-t border-slate-800 px-4 py-3 sm:hidden transform translate-y-full transition-transform duration-300 flex items-center justify-between gap-3 shadow-2xl"
+    >
+      <div class="flex-1 min-w-0">
+        <p id="wz-sticky-title" class="text-xs font-bold text-white truncate">WZSTORE Oficial</p>
+        <p id="wz-sticky-price" class="text-xs font-black text-emerald-400">Rendimiento Élite</p>
+      </div>
+      <button
+        type="button"
+        id="wz-sticky-cta"
+        onclick="openDrawer()"
+        class="bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-black text-[11px] uppercase tracking-wider px-4 py-2.5 rounded-lg transition-transform flex items-center gap-1.5"
+      >
+        <svg class="w-4 h-4 fill-current" viewBox="0 0 20 20">
+          <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
+        </svg>
+        <span>Ver Carro</span>
+      </button>
+    </div>
 
     <script src="db.js"></script>
     <script src="app.js"></script>

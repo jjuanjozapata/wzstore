@@ -228,6 +228,174 @@ const SHIP_RATES = { local: 5000, nacional: 20000 };
 document.addEventListener("DOMContentLoaded", () => {
   initApp();
   recoverCartFromUrl();
+
+  // 1. Fallback visual universal en onerror para etiquetas <img> sin SVG roto
+  window.handleImageError = (imgEl) => {
+    if (!imgEl) return;
+    imgEl.onerror = null;
+    const parent = imgEl.parentElement;
+    if (parent) {
+      const skeleton = parent.querySelector(".skeleton-placeholder");
+      if (skeleton) skeleton.remove();
+
+      const placeholder = document.createElement("div");
+      placeholder.className = "absolute inset-0 w-full h-full bg-slate-950 flex flex-col items-center justify-center text-slate-600 p-4 text-center select-none z-10 border border-slate-800/60";
+      placeholder.innerHTML = `
+        <svg class="w-10 h-10 mb-2 stroke-slate-500 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+        </svg>
+        <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">WZSTORE PRENDA</span>
+      `;
+      imgEl.classList.add("hidden");
+      parent.appendChild(placeholder);
+    }
+  };
+
+  // 2. Modal Centrado con Backdrop-Blur para reemplazar alert() nativos
+  window.showStoreModal = (mensaje, titulo = "WZSTORE Colombia") => {
+    let modal = document.getElementById("wz-store-modal");
+    if (!modal) {
+      modal = document.createElement("div");
+      modal.id = "wz-store-modal";
+      modal.className = "fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-300";
+      modal.innerHTML = `
+        <div class="bg-slate-900 border border-slate-800 text-white rounded-2xl max-w-md w-full p-6 shadow-2xl transform scale-95 transition-transform duration-300 relative">
+          <button type="button" onclick="closeStoreModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-xl font-bold w-8 h-8 rounded-full hover:bg-slate-800 flex items-center justify-center transition-colors">&times;</button>
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center font-black text-sm tracking-wider">WZ</div>
+            <h3 id="wz-store-modal-title" class="text-base font-bold text-white tracking-wide"></h3>
+          </div>
+          <p id="wz-store-modal-body" class="text-slate-300 text-xs leading-relaxed mb-6"></p>
+          <div class="flex justify-end">
+            <button type="button" onclick="closeStoreModal()" class="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold px-6 py-2.5 rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20">Aceptar</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) window.closeStoreModal();
+      });
+    }
+
+    const titleEl = document.getElementById("wz-store-modal-title");
+    const bodyEl = document.getElementById("wz-store-modal-body");
+    if (titleEl) titleEl.textContent = titulo;
+    if (bodyEl) bodyEl.textContent = mensaje;
+
+    modal.classList.remove("opacity-0", "pointer-events-none");
+    const container = modal.querySelector("div");
+    if (container) container.classList.remove("scale-95");
+  };
+
+  window.closeStoreModal = () => {
+    const modal = document.getElementById("wz-store-modal");
+    if (modal) {
+      modal.classList.add("opacity-0", "pointer-events-none");
+      const container = modal.querySelector("div");
+      if (container) container.classList.add("scale-95");
+    }
+  };
+
+  // Redireccionar alert() nativo al nuevo modal centrado
+  window.alert = (msg) => window.showStoreModal(msg);
+
+  // 3. Hover y Toque Táctil Mobile en Tarjetas de Producto (Imágenes frontal <-> posterior)
+  const swapProductImage = (container, forceSecond = null) => {
+    if (!container) return;
+    const img = container.querySelector("img");
+    if (!img) return;
+
+    const prodId = container.dataset.productId || container.getAttribute("data-id");
+    const prod = products.find((p) => String(p.id) === String(prodId));
+    if (!prod) return;
+
+    const images = (prod.media?.images && prod.media.images.length > 0)
+      ? prod.media.images
+      : (prod.imageUrl ? [prod.imageUrl] : []);
+
+    if (images.length < 2) return;
+
+    if (!img.dataset.frontSrc) {
+      img.dataset.frontSrc = images[0];
+      img.dataset.backSrc = images[1];
+    }
+
+    if (forceSecond === true) {
+      img.src = img.dataset.backSrc;
+    } else if (forceSecond === false) {
+      img.src = img.dataset.frontSrc;
+    } else {
+      img.src = img.src === img.dataset.backSrc ? img.dataset.frontSrc : img.dataset.backSrc;
+    }
+  };
+
+  document.addEventListener("mouseover", (e) => {
+    const container = e.target.closest(".product-media-container");
+    if (container && window.innerWidth >= 1024) {
+      swapProductImage(container, true);
+    }
+  });
+
+  document.addEventListener("mouseout", (e) => {
+    const container = e.target.closest(".product-media-container");
+    if (container && window.innerWidth >= 1024) {
+      swapProductImage(container, false);
+    }
+  });
+
+  // Alternar imagen con toque en pantallas móviles
+  document.addEventListener("touchstart", (e) => {
+    const container = e.target.closest(".product-media-container");
+    if (container && window.innerWidth < 1024) {
+      swapProductImage(container);
+    }
+  }, { passive: true });
+
+  // 4. Delegación Global de Eventos (prevent freeze por inactividad / re-render)
+  document.addEventListener("click", (e) => {
+    const target = e.target;
+
+    // Botones de añadir al carrito
+    const addBtn = target.closest("[data-action='add-to-cart']");
+    if (addBtn) {
+      const pId = addBtn.dataset.productId;
+      if (pId && typeof window.addToCart === "function") {
+        window.addToCart(pId);
+      }
+      return;
+    }
+
+    // Filtros de categoría
+    const catBtn = target.closest("[data-action='filter-category']");
+    if (catBtn) {
+      const cat = catBtn.dataset.category;
+      if (cat && typeof window.handleParentCategory === "function") {
+        window.handleParentCategory(cat);
+      }
+      return;
+    }
+
+    // Filtros de género
+    const genderBtn = target.closest("[data-action='filter-gender']");
+    if (genderBtn) {
+      const gen = genderBtn.dataset.gender;
+      if (gen && typeof window.applyGenderFilter === "function") {
+        window.applyGenderFilter(gen);
+      }
+      return;
+    }
+
+    // Control del drawer del carrito
+    const cartToggleBtn = target.closest("[data-action='toggle-cart']");
+    if (cartToggleBtn) {
+      const drawer = document.getElementById("drawer-cart");
+      if (drawer && drawer.classList.contains("open")) {
+        if (typeof window.closeDrawer === "function") window.closeDrawer();
+      } else {
+        if (typeof window.openDrawer === "function") window.openDrawer();
+      }
+    }
+  });
   setupEventListeners();
   initMobileVideoObserver();
 

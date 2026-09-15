@@ -167,8 +167,45 @@ const safeStorage = {
   }
 };
 
+// Control de versión para sincronización automática de prendas en teléfonos
+const WZ_VERSION_DB = "1.1";
+window.WZ_VERSION_DB = WZ_VERSION_DB;
+
+const syncDatabaseVersion = () => {
+  try {
+    const localVersion = safeStorage.getItem("wz_version_db") || (window.localStorage ? window.localStorage.getItem("wz_version_db") : null);
+    if (!localVersion || localVersion !== WZ_VERSION_DB) {
+      console.info(`[WZSTORE] Versión de datos actualizada a ${WZ_VERSION_DB}. Limpiando caché obsoleta...`);
+      safeStorage.removeItem("wz_core_products");
+      safeStorage.removeItem("wz_products");
+      if (window.localStorage) {
+        window.localStorage.removeItem("wz_core_products");
+        window.localStorage.removeItem("wz_products");
+      }
+
+      const freshData = (typeof INITIAL_DATABASE !== "undefined" && Array.isArray(INITIAL_DATABASE))
+        ? INITIAL_DATABASE
+        : [];
+      products = freshData;
+      safeStorage.setItem("wz_core_products", JSON.stringify(freshData));
+      safeStorage.setItem("wz_products", JSON.stringify(freshData));
+      safeStorage.setItem("wz_version_db", WZ_VERSION_DB);
+      return true;
+    }
+  } catch (err) {
+    console.warn("[WZSTORE] Error al sincronizar versión DB:", err);
+  }
+  return false;
+};
+
+// Sincronización inmediata al evaluar el script
+syncDatabaseVersion();
+
 // Inicialización blindada contra fallos de almacenamiento o datos corruptos
 const initApp = () => {
+  // Asegurar sincronización de versión al cargar la página
+  syncDatabaseVersion();
+
   const rawProducts = safeStorage.getItem("wz_core_products") || safeStorage.getItem("wz_products");
 
   if (!rawProducts) {
@@ -181,7 +218,7 @@ const initApp = () => {
   } else {
     try {
       const parsed = JSON.parse(rawProducts);
-      products = Array.isArray(parsed) && parsed.length > 0 ? parsed : (INITIAL_DATABASE || []);
+      products = Array.isArray(parsed) && parsed.length > 0 ? parsed : ((typeof INITIAL_DATABASE !== "undefined" && Array.isArray(INITIAL_DATABASE)) ? INITIAL_DATABASE : []);
     } catch (e) {
       products = (typeof INITIAL_DATABASE !== "undefined" && Array.isArray(INITIAL_DATABASE)) ? INITIAL_DATABASE : [];
     }

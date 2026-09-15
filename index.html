@@ -153,7 +153,7 @@
       });
     </script>
   </head>
-  <body class="bg-[#080b11] text-white selection:bg-green-500 selection:text-black">
+  <body class="bg-[#080b11] text-white selection:bg-green-500 selection:text-black pb-36">
 
     <!-- MODAL CENTRADO WZSTORE -->
     <div id="wz-store-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-md p-4 transition-all duration-200">
@@ -235,7 +235,7 @@
     </header>
 
     <!-- Control y Filtros -->
-    <main class="max-w-7xl mx-auto px-4 py-8 pb-20 sm:pb-8">
+    <main class="max-w-7xl mx-auto px-4 py-8 pb-36 sm:pb-8">
       <!-- HERO SHOWCASE: PRENDA DE TENDENCIA / DROP DE LA SEMANA -->
       <section
         id="wz-featured-hero"
@@ -545,7 +545,7 @@
 
     <!-- Footer Transparencia Legal (Google Policy) -->
     <footer
-      class="border-t border-[#1e293b] bg-[#05070a] mt-16 py-8 text-center text-xs text-gray-500 px-4"
+      class="border-t border-[#1e293b] bg-[#05070a] mt-16 py-8 pb-36 sm:pb-12 text-center text-xs text-gray-500 px-4"
     >
       <p class="mb-2 uppercase tracking-widest text-gray-400 font-semibold">
         SEGURIDAD Y TRANSPARENCIA GARANTIZADA
@@ -557,13 +557,16 @@
         la transacción se finaliza de forma protegida y directa mediante
         WhatsApp Business.
       </p>
-      <div class="flex justify-center gap-4">
+      <div class="flex flex-col sm:flex-row justify-center items-center gap-3 sm:gap-6 mt-4">
         <a
           href="politicas.html"
-          class="hover:text-green-400 transition underline"
+          class="hover:text-green-400 transition underline py-2 px-3 text-xs text-gray-400"
           >Términos, Políticas de Envío y Garantías</a
         >
-        <a href="admin.html" class="hover:text-white transition"
+        <a
+          id="admin-link"
+          href="admin.html"
+          class="relative z-30 inline-flex items-center justify-center py-2.5 px-4 rounded-lg bg-slate-900/90 border border-slate-700 text-slate-300 hover:text-white hover:border-emerald-500/60 hover:bg-slate-800 transition text-xs font-semibold shadow-md active:scale-95"
           >Acceso Comercial</a
         >
       </div>

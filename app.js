@@ -214,8 +214,10 @@ const syncDatabaseVersion = () => {
 // Sincronización inmediata al evaluar el script
 syncDatabaseVersion();
 
-// Inicialización blindada con consulta prioritaria a Supabase y respaldo offline
-const initApp = async () => {
+let productsRealtimeChannel = null;
+
+// Carga centralizada de productos desde Supabase con respaldo offline
+const loadProducts = async () => {
   let loadedProducts = null;
 
   // 1. Consulta prioritaria a la tabla 'productos' de Supabase para catálogo fresco multi-dispositivo
@@ -223,16 +225,28 @@ const initApp = async () => {
     try {
       const { data, error } = await supabase.from('productos').select('*');
       if (!error && Array.isArray(data) && data.length > 0) {
-        loadedProducts = data.map((row) => ({
-          ...row,
-          priceRegular: Number(row.price_regular ?? row.priceRegular ?? 0),
-          priceOffer: Number(row.price_offer ?? row.priceOffer ?? 0),
-          subCategory: row.sub_category ?? row.subCategory ?? "",
-          isOffer: Boolean(row.is_offer ?? row.isOffer),
-          isFeatured: Boolean(row.is_featured ?? row.isFeatured),
-          isAvailable: Boolean(row.is_available ?? row.isAvailable ?? true),
-          imageUrl: row.image_url ?? row.imageUrl
-        }));
+        loadedProducts = data.map((row) => {
+          let parsedVariants = row.variants;
+          if (typeof parsedVariants === "string") {
+            try {
+              parsedVariants = JSON.parse(parsedVariants);
+            } catch (e) {
+              parsedVariants = [];
+            }
+          }
+          return {
+            ...row,
+            priceRegular: Number(row.price_regular ?? row.priceRegular ?? 0),
+            priceOffer: Number(row.price_offer ?? row.priceOffer ?? 0),
+            subCategory: row.sub_category ?? row.subCategory ?? "",
+            isOffer: Boolean(row.is_offer ?? row.isOffer),
+            isFeatured: Boolean(row.is_featured ?? row.isFeatured),
+            isAvailable: Boolean(row.is_available ?? row.isAvailable ?? true),
+            imageUrl: row.image_url ?? row.imageUrl,
+            variants: Array.isArray(parsedVariants) ? parsedVariants : (row.variants || []),
+            status: row.status ?? ((row.is_available === false || row.isAvailable === false) ? "agotado" : "activo")
+          };
+        });
         // Mantener localStorage únicamente como respaldo offline
         safeStorage.setItem("wz_core_products", JSON.stringify(loadedProducts));
         safeStorage.setItem("wz_products", JSON.stringify(loadedProducts));
@@ -271,6 +285,20 @@ const initApp = async () => {
 
   products = loadedProducts;
 
+  if (!uiState) uiState = {};
+  products.forEach((p) => {
+    if (!uiState[p.id]) {
+      uiState[p.id] = { colorIdx: 0, sizeIdx: null };
+    }
+  });
+
+  return products;
+};
+
+// Inicialización blindada con consulta prioritaria a Supabase y respaldo offline
+const initApp = async () => {
+  await loadProducts();
+
   // Cargar estado del carrito protegiendo integridad de tipos
   const storedCart = safeStorage.getItem("wz_cart");
   if (storedCart) {
@@ -298,6 +326,28 @@ const initApp = async () => {
   currentFilter.gender = 'todas';
   executeMasterFilters();
   updateCartUI();
+
+  // Inicializar canal Realtime de Supabase para actualización reactiva del catálogo y hero
+  if (supabase && !productsRealtimeChannel) {
+    productsRealtimeChannel = supabase
+      .channel('public:productos')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'productos' },
+        async () => {
+          await loadProducts();
+          if (typeof renderFeaturedHero === "function") {
+            renderFeaturedHero();
+          }
+          if (typeof executeMasterFilters === "function") {
+            executeMasterFilters();
+          } else if (typeof renderCatalog === "function") {
+            renderCatalog();
+          }
+        }
+      )
+      .subscribe();
+  }
 };
 
 // Enlace de compatibilidad con renderizado directo
@@ -1523,6 +1573,52 @@ const processCheckout = () => {
     const authenticRegularPrice = Number(original.priceRegular) > 0 ? Number(original.priceRegular) : authenticPrice;
     const safeQty = Math.max(1, Math.floor(Number(item.qty) || 1));
     item.qty = safeQty;
+
+    // Validación de disponibilidad y stock específico de variante y talla
+    const isGarmentAvailable = original.isAvailable !== false && original.status !== "agotado";
+
+    let variants = original.variants;
+    if (typeof variants === "string") {
+      try {
+        variants = JSON.parse(variants);
+      } catch (e) {
+        variants = [];
+      }
+    }
+    const variantsList = Array.isArray(variants) ? variants : [];
+    const cleanItemColor = String(item.color || "").trim().toLowerCase();
+    const matchedVariant = variantsList.find(
+      (v) => v.color && v.color.trim().toLowerCase() === cleanItemColor
+    ) || variantsList[0];
+
+    const cleanItemSize = String(item.size || "").trim().toUpperCase();
+    const matchedSizeObj = matchedVariant?.sizes?.find(
+      (s) => String(s.size || "").trim().toUpperCase() === cleanItemSize
+    );
+    const stock = Number(matchedSizeObj?.stock ?? 0);
+    const stockSufficient = stock >= safeQty;
+
+    if (!isGarmentAvailable || !matchedSizeObj || !stockSufficient) {
+      if (!isGarmentAvailable || !matchedSizeObj || stock <= 0) {
+        cart = cart.filter((c) => !(String(c.id) === String(item.id) && c.color === item.color && c.size === item.size));
+      } else {
+        item.qty = stock;
+        item.maxStock = stock;
+      }
+      saveCart();
+      updateCartUI();
+
+      const checkoutModal = document.getElementById("modal-checkout");
+      if (checkoutModal) {
+        checkoutModal.classList.remove("active");
+      }
+
+      showNotificationModal(
+        "Prenda Agotada",
+        `La prenda "${original.name}" (${item.color ? item.color + ' - ' : ''}Talla ${item.size || ''}) se ha agotado o no cuenta con existencias suficientes.`
+      );
+      return;
+    }
 
     verifiedSubtotal += authenticPrice * safeQty;
     totalRegularCanon += authenticRegularPrice * safeQty;

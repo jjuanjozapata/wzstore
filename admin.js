@@ -8,18 +8,27 @@ const SUPABASE_URL = "https://bthyaqpmvtyncnsbrouv.supabase.co";
 const SUPABASE_KEY = "sb_publishable_nsKtTkdnxMV2C0OUJbYhrw_xYR_7Am9";
 const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
-// Formateador para sincronización con tabla 'productos' en Supabase (soporta snake_case y camelCase)
+// Formateador estricto para sincronización con tabla 'productos' en Supabase (solo columnas de Postgres)
 const formatProductForSupabase = (prod) => {
-  if (!prod) return prod;
+  if (!prod) return null;
+  const isAvailable = Boolean(prod.is_available ?? prod.isAvailable ?? true);
   return {
-    ...prod,
+    id: prod.id,
+    name: prod.name ?? "",
+    description: prod.description ?? "",
+    category: prod.category ?? "",
+    sub_category: prod.sub_category ?? prod.subCategory ?? "",
+    badge: prod.badge ?? prod.tag ?? "",
+    tag: prod.tag ?? prod.badge ?? "",
+    is_featured: Boolean(prod.is_featured ?? prod.isFeatured),
+    is_offer: Boolean(prod.is_offer ?? prod.isOffer),
     price_regular: Number(prod.price_regular ?? prod.priceRegular ?? 0),
     price_offer: Number(prod.price_offer ?? prod.priceOffer ?? 0),
-    sub_category: prod.sub_category ?? prod.subCategory ?? "",
-    is_offer: Boolean(prod.is_offer ?? prod.isOffer),
-    is_featured: Boolean(prod.is_featured ?? prod.isFeatured),
-    is_available: Boolean(prod.is_available ?? prod.isAvailable ?? true),
-    image_url: prod.image_url ?? prod.imageUrl ?? ""
+    image_url: prod.image_url ?? prod.imageUrl ?? "",
+    media: prod.media ?? { images: [], video: "" },
+    variants: Array.isArray(prod.variants) ? prod.variants : [],
+    is_available: isAvailable,
+    status: prod.status ?? (isAvailable ? "activo" : "agotado")
   };
 };
 
@@ -326,22 +335,13 @@ if (closePwdBtn) closePwdBtn.addEventListener("click", closePasswordModal);
 if (cancelPwdBtn) cancelPwdBtn.addEventListener("click", closePasswordModal);
 
 if (pwdForm) {
-  pwdForm.addEventListener("submit", (e) => {
+  const currPassInput = document.getElementById("wz-pwd-current");
+  if (currPassInput) currPassInput.removeAttribute("required");
+
+  pwdForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const currPass = document.getElementById("wz-pwd-current").value;
-    const newPass = document.getElementById("wz-pwd-new").value;
-    const confirmPass = document.getElementById("wz-pwd-confirm").value;
-    const session = getCurrentSession();
-
-    if (!session) return;
-
-    const users = getStoredUsers();
-    const userIndex = users.findIndex((u) => u.username.toLowerCase() === session.username.toLowerCase());
-
-    if (userIndex === -1 || users[userIndex].password !== currPass) {
-      showToast("La contraseña actual no coincide.", "error");
-      return;
-    }
+    const newPass = document.getElementById("wz-pwd-new")?.value || "";
+    const confirmPass = document.getElementById("wz-pwd-confirm")?.value || "";
 
     if (newPass.length < 6) {
       showToast("La nueva clave debe tener al menos 6 caracteres.", "error");
@@ -353,10 +353,22 @@ if (pwdForm) {
       return;
     }
 
-    users[userIndex].password = newPass;
-    saveStoredUsers(users);
-    closePasswordModal();
-    showToast("Contraseña actualizada exitosamente.");
+    if (!supabase) {
+      showToast("Cliente de Supabase no disponible.", "error");
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.auth.updateUser({ password: newPass });
+      if (error) {
+        showToast(error.message || "Error al actualizar la contraseña.", "error");
+        return;
+      }
+      showToast("Contraseña actualizada exitosamente.");
+      closePasswordModal();
+    } catch (err) {
+      showToast(err.message || "Error al actualizar la contraseña.", "error");
+    }
   });
 }
 
@@ -921,6 +933,7 @@ function initRestockModal() {
       // Reasignación de inventario pasando el estado a 'activo'
       target.status = "activo";
       target.isAvailable = true;
+      target.is_available = true;
       saveProducts(products);
       if (supabase) {
         supabase.from('productos').upsert(formatProductForSupabase(target)).catch((err) => console.error("Error en Supabase:", err));
@@ -946,6 +959,7 @@ function openRestockModal(target) {
       target.variants?.forEach((v) => v.sizes?.forEach((s) => (s.stock = qty)));
       target.status = "activo";
       target.isAvailable = true;
+      target.is_available = true;
       let products = loadProducts();
       const idx = products.findIndex((p) => p.id === target.id);
       if (idx > -1) products[idx] = target;
@@ -995,6 +1009,7 @@ window.toggleProductStatus = async function(id) {
     // Desactivar inmediatamente pasando existencias lógicas a cero
     target.status = "agotado";
     target.isAvailable = false;
+    target.is_available = false;
     target.variants?.forEach((variant) => {
       variant.sizes?.forEach((sizeObj) => {
         sizeObj.stock = 0;

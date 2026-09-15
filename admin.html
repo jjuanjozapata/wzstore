@@ -54,10 +54,10 @@
     <!-- 🔒 OVERLAY DE LOGIN (Conforme a directiva de arquitectura WZSTORE) -->
     <div
       id="wz-login-overlay"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-dark transition-opacity duration-300"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-dark min-h-screen overflow-y-auto p-4 transition-opacity duration-300"
     >
       <div
-        class="bg-card p-8 rounded-xl border border-gray-800 w-96 shadow-[0_0_40px_rgba(34,197,94,0.1)]"
+        class="bg-card p-8 rounded-xl border border-gray-800 w-full max-w-sm my-auto shadow-[0_0_40px_rgba(34,197,94,0.1)]"
       >
         <div class="text-center mb-8">
           <h1 class="text-3xl font-black tracking-tighter uppercase mb-1">
@@ -65,11 +65,15 @@
           </h1>
           <p class="text-gray-400 text-sm">Acceso Restringido</p>
         </div>
-        <form id="login-form" class="space-y-4">
+        <form id="login-form" class="space-y-4" method="POST" action="javascript:void(0);">
           <div>
             <input
               type="text"
               id="username"
+              autocomplete="username"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
               placeholder="Usuario"
               class="w-full bg-dark border border-gray-700 rounded px-4 py-3 text-white focus:outline-none focus:border-neon transition-colors"
               required
@@ -79,6 +83,7 @@
             <input
               type="password"
               id="password"
+              autocomplete="current-password"
               placeholder="Contraseña"
               class="w-full bg-dark border border-gray-700 rounded px-4 py-3 text-white focus:outline-none focus:border-neon transition-colors"
               required
@@ -86,7 +91,7 @@
           </div>
           <button
             type="submit"
-            class="w-full bg-neon text-black font-bold py-3 rounded hover:bg-green-400 transition-colors uppercase tracking-wide"
+            class="w-full bg-neon text-black font-bold py-3 rounded hover:bg-green-400 transition-colors uppercase tracking-wide cursor-pointer"
           >
             Desbloquear Panel
           </button>
@@ -118,10 +123,11 @@
 
             <!-- Botones de Respaldo y Restauración de Catálogo (Backup & Restore) -->
             <button
+              id="btn-export-db"
               type="button"
               onclick="exportCatalogBackup()"
-              title="Descargar respaldo del catálogo en archivo JSON"
-              class="text-xs bg-slate-800 hover:bg-slate-700 text-emerald-400 px-3 py-1.5 rounded-lg border border-emerald-500/30 transition-colors font-medium flex items-center gap-1.5"
+              title="Descargar respaldo del catálogo en archivo db.json"
+              class="text-xs bg-slate-800 hover:bg-slate-700 text-emerald-400 px-3 py-1.5 rounded-lg border border-emerald-500/30 transition-colors font-medium flex items-center gap-1.5 cursor-pointer"
             >
               <span>Exportar</span>
             </button>
@@ -648,9 +654,9 @@
               <button
                 type="button"
                 id="add-variant-btn"
-                class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-1.5 rounded text-sm font-bold transition-colors"
+                class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-1.5 rounded text-sm font-bold transition-colors cursor-pointer"
               >
-                Añadir
+                Añadir Talla
               </button>
             </div>
 

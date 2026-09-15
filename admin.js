@@ -271,59 +271,66 @@ const checkExistingLockout = () => {
 // Verificar estado de bloqueo inmediatamente al renderizar
 document.addEventListener("DOMContentLoaded", checkExistingLockout);
 
-document.getElementById("login-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
+const loginForm = document.getElementById("login-form");
+if (loginForm) {
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
 
-  if (checkExistingLockout()) return;
+    if (checkExistingLockout()) return;
 
-  const lockoutState = JSON.parse(localStorage.getItem(LOCKOUT_KEY) || '{"attempts": 0, "lockedUntil": 0}');
-  const now = Date.now();
+    const lockoutState = JSON.parse(localStorage.getItem(LOCKOUT_KEY) || '{"attempts": 0, "lockedUntil": 0}');
+    const now = Date.now();
 
-  const u = document.getElementById("username").value.trim().toLowerCase();
-  const p = document.getElementById("password").value;
-  const incomingHash = await sha256Hex(p);
+    const usernameEl = document.getElementById("username");
+    const passwordEl = document.getElementById("password");
+    const u = usernameEl ? usernameEl.value.trim().toLowerCase() : "";
+    const p = passwordEl ? passwordEl.value : "";
+    const incomingHash = await sha256Hex(p);
 
-  const users = getStoredUsers();
-  // Comparación criptográfica estricta: ninguna verificación en texto plano permitida
-  const matchedUser = users.find((user) => 
-    user.username.toLowerCase() === u && 
-    user.passwordHash === incomingHash
-  );
-
-  if (matchedUser) {
-    localStorage.removeItem(LOCKOUT_KEY);
-    sessionStorage.setItem(
-      SESSION_KEY,
-      JSON.stringify({
-        username: matchedUser.username,
-        role: matchedUser.role,
-        timestamp: Date.now()
-      })
+    const users = getStoredUsers();
+    // Comparación criptográfica estricta: ninguna verificación en texto plano permitida
+    const matchedUser = users.find((user) => 
+      user.username.toLowerCase() === u && 
+      user.passwordHash === incomingHash
     );
-    const errorEl = document.getElementById("login-error");
-    if (errorEl) errorEl.classList.add("hidden");
-    document.getElementById("username").value = "";
-    document.getElementById("password").value = "";
-    checkAuth();
-  } else {
-    lockoutState.attempts = (lockoutState.attempts || 0) + 1;
 
-    // Bloqueo tras 3 intentos fallidos por exactamente 5 minutos (300.000 ms)
-    if (lockoutState.attempts >= 3) {
-      const lockDurationMs = 5 * 60 * 1000;
-      lockoutState.lockedUntil = now + lockDurationMs;
-      lockoutState.attempts = 0;
-      localStorage.setItem(LOCKOUT_KEY, JSON.stringify(lockoutState));
-      checkExistingLockout();
-    } else {
-      localStorage.setItem(LOCKOUT_KEY, JSON.stringify(lockoutState));
-      const remainingAttempts = 3 - lockoutState.attempts;
+    if (matchedUser) {
+      localStorage.removeItem(LOCKOUT_KEY);
+      sessionStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify({
+          username: matchedUser.username,
+          role: matchedUser.role,
+          timestamp: Date.now()
+        })
+      );
       const errorEl = document.getElementById("login-error");
-      errorEl.textContent = `Credenciales inválidas. Intentos restantes: ${remainingAttempts}.`;
-      errorEl.classList.remove("hidden");
+      if (errorEl) errorEl.classList.add("hidden");
+      if (usernameEl) usernameEl.value = "";
+      if (passwordEl) passwordEl.value = "";
+      checkAuth();
+    } else {
+      lockoutState.attempts = (lockoutState.attempts || 0) + 1;
+
+      // Bloqueo tras 3 intentos fallidos por exactamente 5 minutos (300.000 ms)
+      if (lockoutState.attempts >= 3) {
+        const lockDurationMs = 5 * 60 * 1000;
+        lockoutState.lockedUntil = now + lockDurationMs;
+        lockoutState.attempts = 0;
+        localStorage.setItem(LOCKOUT_KEY, JSON.stringify(lockoutState));
+        checkExistingLockout();
+      } else {
+        localStorage.setItem(LOCKOUT_KEY, JSON.stringify(lockoutState));
+        const remainingAttempts = 3 - lockoutState.attempts;
+        const errorEl = document.getElementById("login-error");
+        if (errorEl) {
+          errorEl.textContent = `Credenciales inválidas. Intentos restantes: ${remainingAttempts}.`;
+          errorEl.classList.remove("hidden");
+        }
+      }
     }
-  }
-});
+  });
+}
 
 // Controladores para Modal de Cambio de Contraseña
 const pwdModal = document.getElementById("wz-password-modal");
@@ -597,6 +604,7 @@ document.querySelectorAll(".time-filter").forEach((btn) => {
 // 3. CRUD & GESTIÓN DE INVENTARIO
 // ==========================================
 let currentVariants = [];
+let tempVariants = [];
 let editingId = null;
 let mediaBuffer = { images: [], video: "" };
 
@@ -959,23 +967,12 @@ window.toggleProductStatus = function(id) {
 const modal = document.getElementById("crud-modal");
 const form = document.getElementById("product-form");
 
-// 15. Compresión Automática Inteligente en Canvas con cálculo dinámico
+// 15. Compresión Automática Inteligente en Canvas con cálculo estricto
 const compressImage = (file) => {
   return new Promise((resolve, reject) => {
-    // Determinación dinámica de factores según el peso del archivo de entrada
-    let maxDimension = 800;
-    let targetQuality = 0.75;
-
-    if (file.size > 3 * 1024 * 1024) {
-      maxDimension = 650;
-      targetQuality = 0.55;
-    } else if (file.size > 1024 * 1024) {
-      maxDimension = 750;
-      targetQuality = 0.65;
-    } else if (file.size < 300 * 1024) {
-      maxDimension = 900;
-      targetQuality = 0.85;
-    }
+    // Tope estricto de 800px y calidad 0.7 para teléfonos móviles
+    const maxDimension = 800;
+    const targetQuality = 0.7;
 
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -987,13 +984,11 @@ const compressImage = (file) => {
         let width = img.width;
         let height = img.height;
 
-        if (width > height) {
-          if (width > maxDimension) {
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
             height = Math.round((height * maxDimension) / width);
             width = maxDimension;
-          }
-        } else {
-          if (height > maxDimension) {
+          } else {
             width = Math.round((width * maxDimension) / height);
             height = maxDimension;
           }
@@ -1006,6 +1001,7 @@ const compressImage = (file) => {
         ctx.imageSmoothingQuality = "high";
         ctx.drawImage(img, 0, 0, width, height);
 
+        // Exportación estricta de 'image/jpeg' con calidad 0.7 para evitar cadenas corruptas o signos '?' en teléfonos
         const dataUrl = canvas.toDataURL("image/jpeg", targetQuality);
         resolve(dataUrl);
       };
@@ -1119,6 +1115,7 @@ document.getElementById("open-crud-btn").addEventListener("click", () => {
   }
 
   currentVariants = [];
+  tempVariants = [];
   mediaBuffer = { images: [], video: "" };
   renderMediaPreviews();
   initMediaDropZone();
@@ -1227,77 +1224,164 @@ function calculateOfferPrice() {
   }
 }
 
-// Mapeo Dinámico de Variantes
-document.getElementById("add-variant-btn").addEventListener("click", () => {
-  const color = document.getElementById("var-color").value.trim();
-  const size = document.getElementById("var-size").value.trim().toUpperCase();
-  const stock = Number(document.getElementById("var-stock").value);
+// ==========================================
+// Mapeo Dinámico de Variantes Reactivas (tempVariants)
+// ==========================================
+function syncCurrentVariantsFromTemp() {
+  const grouped = {};
+  tempVariants.forEach((item) => {
+    const col = item.color || "Único";
+    if (!grouped[col]) {
+      grouped[col] = {
+        color: col,
+        colorHex: item.colorHex || "#" + Math.floor(Math.random() * 16777215).toString(16),
+        sizes: []
+      };
+    }
+    grouped[col].sizes.push({
+      size: item.size,
+      stock: Number(item.stock) || 0
+    });
+  });
+  currentVariants = Object.values(grouped);
+}
 
-  if (!color || !size || stock < 0) {
-    alert("Completa color, talla y stock válido para agregar la variante.");
+function syncTempFromCurrentVariants() {
+  tempVariants = [];
+  if (Array.isArray(currentVariants)) {
+    currentVariants.forEach((v) => {
+      if (Array.isArray(v.sizes)) {
+        v.sizes.forEach((s) => {
+          tempVariants.push({
+            color: v.color || "Único",
+            colorHex: v.colorHex || "#10b981",
+            size: s.size,
+            stock: Number(s.stock) || 0
+          });
+        });
+      }
+    });
+  }
+}
+
+function addVariant() {
+  const colorInput = document.getElementById("var-color");
+  const sizeInput = document.getElementById("var-size");
+  const stockInput = document.getElementById("var-stock");
+
+  const color = (colorInput?.value.trim()) || "Único";
+  const size = (sizeInput?.value.trim().toUpperCase()) || "";
+  const stockVal = stockInput ? stockInput.value.trim() : "";
+  const stock = Number(stockVal);
+
+  if (!size) {
+    if (typeof showToast === "function") showToast("Por favor ingresa una talla.", "error");
+    else alert("Por favor ingresa una talla.");
+    sizeInput?.focus();
     return;
   }
 
-  // Lógica para agrupar por color si ya existe
-  let existingColor = currentVariants.find(
-    (v) => v.color.toLowerCase() === color.toLowerCase(),
+  if (stockVal === "" || isNaN(stock) || stock < 0) {
+    if (typeof showToast === "function") showToast("Por favor ingresa un stock válido.", "error");
+    else alert("Por favor ingresa un stock válido.");
+    stockInput?.focus();
+    return;
+  }
+
+  // Verificar si la combinación ya existe para actualizarla
+  const existingIdx = tempVariants.findIndex(
+    (v) => v.color.toLowerCase() === color.toLowerCase() && v.size.toUpperCase() === size.toUpperCase()
   );
 
-  if (existingColor) {
-    // Verificar si la talla ya existe para ese color
-    let existingSize = existingColor.sizes.find((s) => s.size === size);
-    if (existingSize) {
-      existingSize.stock = stock; // Actualizamos stock si repite
-    } else {
-      existingColor.sizes.push({ size, stock });
-    }
+  if (existingIdx > -1) {
+    tempVariants[existingIdx].stock = stock;
   } else {
-    currentVariants.push({
+    tempVariants.push({
       color: color,
-      colorHex: "#" + Math.floor(Math.random() * 16777215).toString(16), // Color hex aleatorio para UI del cliente
-      sizes: [{ size, stock }],
+      colorHex: "#" + Math.floor(Math.random() * 16777215).toString(16),
+      size: size,
+      stock: stock
     });
   }
 
-  // Limpiar inputs
-  document.getElementById("var-size").value = "";
-  document.getElementById("var-stock").value = "";
-  document.getElementById("var-color").focus();
-
+  syncCurrentVariantsFromTemp();
   renderVariantsList();
-});
+
+  if (sizeInput) sizeInput.value = "";
+  if (stockInput) stockInput.value = "";
+  sizeInput?.focus();
+}
 
 function renderVariantsList() {
   const list = document.getElementById("variants-list");
-  const msg = document.getElementById("empty-variants-msg");
+  if (!list) return;
 
-  if (currentVariants.length === 0) {
-    list.innerHTML = "";
-    list.appendChild(msg);
-    msg.classList.remove("hidden");
+  if (tempVariants.length === 0) {
+    list.innerHTML = `
+      <p class="text-gray-500 text-sm text-center py-2" id="empty-variants-msg">
+        No hay variantes asignadas. Agrega al menos una.
+      </p>
+    `;
     return;
   }
-  msg.classList.add("hidden");
 
-  let html = "";
-  currentVariants.forEach((v, colorIdx) => {
-    html += `<div class="bg-dark p-2 rounded border border-gray-700 flex flex-wrap items-center gap-2 mb-2">
-            <span class="font-bold text-sm min-w-[80px]">${v.color}</span>`;
-
-    v.sizes.forEach((s, sizeIdx) => {
-      html += `<span class="bg-gray-800 px-2 py-1 rounded text-xs">${s.size} : <b class="text-neon">${s.stock}</b></span>`;
-    });
-
-    html += `<button type="button" onclick="removeVariantColor(${colorIdx})" class="ml-auto text-red-500 hover:text-red-400 text-xs font-bold px-2 py-1">&times; Quitar</button>
-        </div>`;
+  let html = `<div class="flex flex-wrap gap-2 p-1">`;
+  tempVariants.forEach((v, idx) => {
+    html += `
+      <div class="inline-flex items-center gap-2 bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold text-white shadow-sm hover:border-emerald-500/50 transition-all">
+        ${v.color && v.color !== "Único" ? `<span class="text-gray-400 font-normal">${v.color} ·</span>` : ""}
+        <span>Talla: <strong class="text-emerald-400 font-bold">${v.size}</strong></span>
+        <span class="text-slate-600">|</span>
+        <span>Stock: <strong class="text-white font-bold">${v.stock}</strong></span>
+        <button
+          type="button"
+          onclick="removeTempVariant(${idx})"
+          class="text-red-400 hover:text-white hover:bg-red-600/80 rounded-full w-4 h-4 flex items-center justify-center font-bold text-xs ml-1 transition-colors cursor-pointer"
+          title="Remover variante"
+        >✕</button>
+      </div>
+    `;
   });
+  html += `</div>`;
   list.innerHTML = html;
 }
 
-window.removeVariantColor = function (idx) {
-  currentVariants.splice(idx, 1);
+window.removeTempVariant = function (idx) {
+  tempVariants.splice(idx, 1);
+  syncCurrentVariantsFromTemp();
   renderVariantsList();
 };
+
+window.removeVariantColor = function (idx) {
+  currentVariants.splice(idx, 1);
+  syncTempFromCurrentVariants();
+  renderVariantsList();
+};
+
+const addVariantBtn = document.getElementById("add-variant-btn");
+if (addVariantBtn) {
+  addVariantBtn.addEventListener("click", addVariant);
+}
+
+const varSizeInput = document.getElementById("var-size");
+if (varSizeInput) {
+  varSizeInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addVariant();
+    }
+  });
+}
+
+const varStockInput = document.getElementById("var-stock");
+if (varStockInput) {
+  varStockInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addVariant();
+    }
+  });
+}
 
 
 
@@ -1363,6 +1447,7 @@ window.editProduct = function (id) {
 
   // Clonar profundamente las variantes existentes
   currentVariants = Array.isArray(p.variants) ? JSON.parse(JSON.stringify(p.variants)) : [];
+  syncTempFromCurrentVariants();
   renderVariantsList();
 
   // Restaurar imágenes y video en el buffer multimedia
@@ -1391,8 +1476,13 @@ window.editProduct = function (id) {
 form.addEventListener("submit", (e) => {
   e.preventDefault();
 
-  if (!currentVariants || currentVariants.length === 0) {
-    alert("Debes agregar al menos una variante (Color/Talla/Stock) para listar el producto.");
+  syncCurrentVariantsFromTemp();
+  if (!tempVariants || tempVariants.length === 0) {
+    if (typeof showToast === "function") {
+      showToast("Debes agregar al menos una variante (Color/Talla/Stock) para listar el producto.", "error");
+    } else {
+      alert("Debes agregar al menos una variante (Color/Talla/Stock) para listar el producto.");
+    }
     return;
   }
 
@@ -1491,6 +1581,7 @@ form.addEventListener("submit", (e) => {
   if (hiddenInput) hiddenInput.value = "";
   form.reset();
   currentVariants = [];
+  tempVariants = [];
   mediaBuffer = { images: [], video: "" };
 
   closeModal();
@@ -1516,16 +1607,23 @@ function initDashboard() {
 // 9. Sistema Integral de Copia de Respaldo (Backup & Restore)
 window.exportCatalogBackup = () => {
   const products = loadProducts();
-  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(products, null, 2));
+  const blob = new Blob([JSON.stringify(products, null, 2)], { type: "application/json" });
   const downloadAnchor = document.createElement("a");
-  const fileName = `WZSTORE_BACKUP_${new Date().toISOString().slice(0, 10)}.json`;
-  downloadAnchor.setAttribute("href", dataStr);
+  const fileName = "db.json";
+  const fileUrl = URL.createObjectURL(blob);
+  downloadAnchor.setAttribute("href", fileUrl);
   downloadAnchor.setAttribute("download", fileName);
   document.body.appendChild(downloadAnchor);
   downloadAnchor.click();
   downloadAnchor.remove();
-  if (typeof showToast === "function") showToast("Copia de seguridad descargada exitosamente.");
+  URL.revokeObjectURL(fileUrl);
+  if (typeof showToast === "function") showToast("Catálogo descargado exitosamente en db.json");
 };
+
+const btnExportDb = document.getElementById("btn-export-db");
+if (btnExportDb) {
+  btnExportDb.addEventListener("click", window.exportCatalogBackup);
+}
 
 window.importCatalogBackup = (event) => {
   const file = event.target.files[0];

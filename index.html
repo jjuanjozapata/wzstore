@@ -155,15 +155,29 @@
   </head>
   <body class="bg-[#080b11] text-white selection:bg-green-500 selection:text-black">
 
-    <!-- MODAL MINIMALISTA DE NOTIFICACIONES Y ALERTAS -->
-    <div id="wz-alert-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-sm p-4 transition-opacity duration-200">
-      <div class="bg-[#111726] border border-[#1e293b] rounded-xl max-w-sm w-full p-6 text-center shadow-2xl transform transition-transform">
-        <h3 id="wz-alert-title" class="text-base font-bold text-white mb-2 uppercase tracking-wide">Notificación</h3>
-        <p id="wz-alert-body" class="text-xs text-slate-300 mb-6 leading-relaxed whitespace-pre-line"></p>
+    <!-- MODAL CENTRADO WZSTORE -->
+    <div id="wz-store-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-md p-4 transition-all duration-200">
+      <div class="bg-[#111726] border border-[#1e293b] rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl relative transform transition-all">
         <button
           type="button"
-          onclick="closeNotificationModal()"
-          class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider py-2.5 rounded transition-colors"
+          id="wz-store-modal-close"
+          data-action="close-store-modal"
+          onclick="closeStoreModal()"
+          class="absolute top-4 right-4 text-slate-400 hover:text-white text-xl font-bold w-8 h-8 rounded-full hover:bg-slate-800 flex items-center justify-center transition-colors"
+          aria-label="Cerrar modal"
+        >
+          &times;
+        </button>
+        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mx-auto flex items-center justify-center font-black text-sm tracking-wider mb-3 shadow-inner">
+          WZ
+        </div>
+        <h3 id="wz-store-modal-title" class="text-base font-bold text-white mb-2 uppercase tracking-wide">WZSTORE</h3>
+        <p id="wz-store-modal-body" class="text-xs text-slate-300 mb-6 leading-relaxed whitespace-pre-line"></p>
+        <button
+          type="button"
+          data-action="close-store-modal"
+          onclick="closeStoreModal()"
+          class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
         >
           Entendido
         </button>
@@ -193,7 +207,9 @@
 
           <button
             id="cart-btn"
+            data-action="toggle-cart"
             class="relative text-white p-2 hover:text-green-400 transition-colors"
+            aria-label="Abrir Carrito"
           >
             <svg
               class="w-6 h-6"
@@ -256,6 +272,7 @@
 
               <button
                 id="wz-hero-buy-btn"
+                data-action="hero-buy"
                 type="button"
                 class="w-full sm:w-auto bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-widest px-8 py-3.5 rounded-xl transition-all shadow-[0_0_20px_rgba(34,197,94,0.3)] hover:scale-105 active:scale-95"
               >
@@ -280,6 +297,7 @@
                 id="wz-hero-image-fallback"
                 class="w-full h-full object-cover"
                 alt="Prenda de Moda"
+                onerror="window.handleImageError(this)"
               />
             </div>
           </div>
@@ -292,42 +310,56 @@
           class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none"
         >
           <button
+            data-action="filter-category"
+            data-category="all"
             onclick="handleParentCategory('all')"
             class="cat-pill bg-emerald-500 text-black px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all"
           >
             Todos
           </button>
           <button
+            data-action="filter-category"
+            data-category="Bermudas"
             onclick="handleParentCategory('Bermudas')"
             class="cat-pill bg-slate-800 text-slate-300 hover:text-white px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all"
           >
             Bermudas
           </button>
           <button
+            data-action="filter-category"
+            data-category="Busos"
             onclick="handleParentCategory('Busos')"
             class="cat-pill bg-slate-800 text-slate-300 hover:text-white px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all"
           >
             Busos
           </button>
           <button
+            data-action="filter-category"
+            data-category="Camisetas"
             onclick="handleParentCategory('Camisetas')"
             class="cat-pill bg-slate-800 text-slate-300 hover:text-white px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all"
           >
             Camisetas
           </button>
           <button
+            data-action="filter-category"
+            data-category="Licras"
             onclick="handleParentCategory('Licras')"
             class="cat-pill bg-slate-800 text-slate-300 hover:text-white px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all"
           >
             Licras
           </button>
           <button
+            data-action="filter-category"
+            data-category="Conjuntos"
             onclick="handleParentCategory('Conjuntos')"
             class="cat-pill bg-slate-800 text-slate-300 hover:text-white px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all"
           >
             Conjuntos
           </button>
           <button
+            data-action="filter-category"
+            data-category="Accesorios"
             onclick="handleParentCategory('Accesorios')"
             class="cat-pill bg-slate-800 text-slate-300 hover:text-white px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all"
           >
@@ -344,6 +376,8 @@
           <button
             type="button"
             id="gender-btn-todas"
+            data-action="filter-gender"
+            data-gender="todas"
             onclick="applyGenderFilter('todas')"
             class="gender-pill px-3 py-1 rounded-lg text-xs font-bold bg-emerald-500 text-black transition-colors"
           >
@@ -352,6 +386,8 @@
           <button
             type="button"
             id="gender-btn-hombre"
+            data-action="filter-gender"
+            data-gender="hombre"
             onclick="applyGenderFilter('hombre')"
             class="gender-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
           >
@@ -360,6 +396,8 @@
           <button
             type="button"
             id="gender-btn-mujer"
+            data-action="filter-gender"
+            data-gender="mujer"
             onclick="applyGenderFilter('mujer')"
             class="gender-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
           >
@@ -374,7 +412,7 @@
       <div class="flex gap-2 justify-center items-center">
         <input type="number" id="wz-calc-height" placeholder="Estatura (cm)" class="w-32 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white text-center focus:border-emerald-500 outline-none">
         <input type="number" id="wz-calc-weight" placeholder="Peso (kg)" class="w-32 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white text-center focus:border-emerald-500 outline-none">
-        <button onclick="calculateRecommendedSize()" class="bg-emerald-500 text-black font-bold text-xs px-3 py-1 rounded hover:bg-emerald-400 transition-colors">Calcular</button>
+        <button data-action="calc-size" onclick="calculateRecommendedSize()" class="bg-emerald-500 text-black font-bold text-xs px-3 py-1 rounded hover:bg-emerald-400 transition-colors">Calcular</button>
       </div>
       <p id="wz-size-result" class="text-xs text-slate-300 mt-2 font-medium hidden"></p>
     </div>
@@ -532,13 +570,13 @@
     </footer>
 
     <!-- Drawer Carrito -->
-    <div id="drawer-overlay" class="drawer-overlay"></div>
+    <div id="drawer-overlay" data-action="close-cart" class="drawer-overlay"></div>
     <div id="drawer-cart" class="drawer-cart">
       <div
         class="p-4 border-b border-[#1e293b] flex justify-between items-center"
       >
         <h2 class="text-xl font-bold">TU EQUIPO</h2>
-        <button id="close-drawer" class="text-gray-400 hover:text-white">
+        <button id="close-drawer" data-action="close-cart" class="text-gray-400 hover:text-white" aria-label="Cerrar carrito">
           <svg
             class="w-6 h-6"
             fill="none"
@@ -582,6 +620,7 @@
           />
           <button
             id="apply-coupon"
+            data-action="apply-coupon"
             class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded text-sm text-white font-bold transition"
           >
             APLICAR
@@ -616,6 +655,7 @@
 
         <button
           id="checkout-btn"
+          data-action="open-checkout"
           class="w-full bg-green-500 text-black font-black py-3 rounded-lg hover:bg-green-400 transition-colors uppercase tracking-widest mb-2 shadow-[0_0_15px_rgba(34,197,94,0.3)]"
         >
           Ir al Checkout
@@ -624,6 +664,7 @@
           <button
             type="button"
             id="btn-save-cart"
+            data-action="save-cart"
             class="w-full border border-slate-700 bg-slate-800/60 text-slate-300 hover:text-white hover:border-slate-500 text-xs py-2 rounded font-semibold transition-colors"
           >
             Guardar Carrito
@@ -631,6 +672,7 @@
           <button
             type="button"
             id="btn-share-cart"
+            data-action="share-cart"
             class="w-full border border-emerald-500/50 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-black text-xs py-2 rounded font-semibold transition-all"
           >
             Compartir Carrito
@@ -646,7 +688,9 @@
       >
         <button
           id="close-modal"
+          data-action="close-checkout"
           class="absolute top-4 right-4 text-gray-400 hover:text-white"
+          aria-label="Cerrar ventana de checkout"
         >
           <svg
             class="w-5 h-5"
@@ -756,6 +800,7 @@
 
           <button
             id="final-buy-btn"
+            data-action="checkout-final"
             type="button"
             data-total="0"
             class="w-full bg-emerald-500 text-black font-black py-3 rounded mt-3 hover:bg-emerald-400 uppercase tracking-wider text-xs transition-colors shadow-lg shadow-emerald-500/20"
@@ -800,6 +845,7 @@
       <button
         type="button"
         id="wz-sticky-cta"
+        data-action="open-cart"
         onclick="openDrawer()"
         class="bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-black text-[11px] uppercase tracking-wider px-4 py-2.5 rounded-lg transition-transform flex items-center gap-1.5"
       >

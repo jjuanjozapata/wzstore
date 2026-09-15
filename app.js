@@ -224,178 +224,421 @@ let appliedCoupon = null; // 'WZ2026' | 'FREEATHLETE'
 let shippingType = "local"; // 'local' | 'nacional'
 const SHIP_RATES = { local: 5000, nacional: 20000 };
 
+// 1. Fallback visual universal en onerror para etiquetas <img> sin SVG roto
+window.handleImageError = (imgEl) => {
+  if (!imgEl) return;
+  imgEl.onerror = null;
+
+  const parent = imgEl.parentElement;
+  if (!parent) return;
+
+  const skeleton = parent.querySelector(".skeleton-placeholder");
+  if (skeleton) skeleton.remove();
+
+  if (parent.querySelector(".wz-img-fallback") || imgEl.dataset.hasFallback === "true") return;
+  imgEl.dataset.hasFallback = "true";
+
+  const isThumb = imgEl.classList.contains("w-16") || imgEl.classList.contains("w-10");
+
+  const fallback = document.createElement("div");
+  if (isThumb) {
+    fallback.className = "wz-img-fallback w-16 h-16 rounded bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-slate-500 flex-shrink-0 select-none shadow-inner";
+    fallback.innerHTML = `
+      <svg class="w-6 h-6 text-emerald-500/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+      <span class="text-[8px] font-black tracking-wider text-slate-400 mt-0.5">WZ</span>
+    `;
+    imgEl.replaceWith(fallback);
+  } else {
+    fallback.className = "wz-img-fallback absolute inset-0 w-full h-full bg-gradient-to-b from-slate-900 via-slate-950 to-[#080b11] flex flex-col items-center justify-center text-slate-400 p-4 text-center select-none z-10 border border-slate-800/80";
+    fallback.innerHTML = `
+      <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mb-2 shadow-inner">
+        <svg class="w-6 h-6 stroke-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+      </div>
+      <span class="text-xs font-black tracking-widest uppercase text-white">WZ<span class="text-emerald-400">STORE</span></span>
+      <span class="text-[10px] font-semibold text-slate-400 mt-1 uppercase tracking-wider">Foto en actualización</span>
+    `;
+    imgEl.classList.add("hidden");
+    parent.appendChild(fallback);
+  }
+};
+
+// 2. Modal Centrado con Backdrop-Blur para reemplazar alert() nativos
+window.showStoreModal = (mensaje, titulo = "WZSTORE") => {
+  let modal = document.getElementById("wz-store-modal") || document.getElementById("wz-alert-modal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "wz-store-modal";
+    modal.className = "fixed inset-0 z-50 hidden items-center justify-center bg-black/80 backdrop-blur-md p-4 transition-all duration-200";
+    modal.innerHTML = `
+      <div class="bg-[#111726] border border-[#1e293b] rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl relative transform transition-all">
+        <button
+          type="button"
+          id="wz-store-modal-close"
+          data-action="close-store-modal"
+          onclick="window.closeStoreModal()"
+          class="absolute top-4 right-4 text-slate-400 hover:text-white text-xl font-bold w-8 h-8 rounded-full hover:bg-slate-800 flex items-center justify-center transition-colors"
+          aria-label="Cerrar modal"
+        >&times;</button>
+        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 mx-auto flex items-center justify-center font-black text-sm tracking-wider mb-3 shadow-inner">WZ</div>
+        <h3 id="wz-store-modal-title" class="text-base font-bold text-white mb-2 uppercase tracking-wide">WZSTORE</h3>
+        <p id="wz-store-modal-body" class="text-xs text-slate-300 mb-6 leading-relaxed whitespace-pre-line"></p>
+        <button
+          type="button"
+          data-action="close-store-modal"
+          onclick="window.closeStoreModal()"
+          class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
+        >Entendido</button>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) window.closeStoreModal();
+    });
+  }
+
+  const titleEl = modal.querySelector("#wz-store-modal-title") || modal.querySelector("#wz-alert-title");
+  const bodyEl = modal.querySelector("#wz-store-modal-body") || modal.querySelector("#wz-alert-body");
+  if (titleEl) titleEl.textContent = titulo;
+  if (bodyEl) bodyEl.textContent = String(mensaje || "");
+
+  modal.classList.remove("hidden");
+  modal.classList.add("flex");
+};
+
+window.closeStoreModal = () => {
+  const modal = document.getElementById("wz-store-modal") || document.getElementById("wz-alert-modal");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+  }
+};
+
+// Reemplazo transparente de alert() nativo
+window.alert = (msg) => window.showStoreModal(msg);
+window.showNotificationModal = (title, message) => window.showStoreModal(message, title);
+window.closeNotificationModal = () => window.closeStoreModal();
+
+// 3. Hover en tarjetas y Toque Táctil Mobile (Alternar foto frontal [0] <-> posterior [1])
+window.swapProductImage = (container, forceSecond = null) => {
+  if (!container) return;
+  const img = container.querySelector("img");
+  if (!img) return;
+
+  const prodId = container.dataset.productId || container.getAttribute("data-id");
+  const prod = (typeof products !== "undefined" && Array.isArray(products))
+    ? products.find((p) => String(p.id) === String(prodId))
+    : null;
+
+  const prodImgs = (prod?.media?.images && prod.media.images.length > 0)
+    ? prod.media.images
+    : (Array.isArray(prod?.imagenes) && prod.imagenes.length > 0
+        ? prod.imagenes
+        : (Array.isArray(prod?.images) && prod.images.length > 0
+            ? prod.images
+            : (prod?.imageUrl ? [prod.imageUrl] : [])));
+
+  const frontSrc = img.dataset.frontSrc || container.dataset.frontSrc || prodImgs[0] || img.src;
+  const backSrc = img.dataset.backSrc || container.dataset.backSrc || (prodImgs.length >= 2 ? prodImgs[1] : "");
+
+  if (!backSrc) return;
+
+  img.dataset.frontSrc = frontSrc;
+  img.dataset.backSrc = backSrc;
+
+  const isBack = img.dataset.currentView === "back";
+
+  if (forceSecond === true) {
+    if (!isBack) {
+      img.src = backSrc;
+      img.dataset.currentView = "back";
+    }
+  } else if (forceSecond === false) {
+    if (isBack) {
+      img.src = frontSrc;
+      img.dataset.currentView = "front";
+    }
+  } else {
+    // Alternar con toque en pantallas táctiles
+    if (isBack) {
+      img.src = frontSrc;
+      img.dataset.currentView = "front";
+    } else {
+      img.src = backSrc;
+      img.dataset.currentView = "back";
+    }
+  }
+};
+
+window.handleCardMouseEnter = (container, prodId) => {
+  window.swapProductImage(container, true);
+  if (typeof window.playProductVideo === "function") {
+    window.playProductVideo(container, prodId);
+  }
+};
+
+window.handleCardMouseLeave = (container, prodId) => {
+  window.swapProductImage(container, false);
+  if (typeof window.stopProductVideo === "function") {
+    window.stopProductVideo(container, prodId);
+  }
+};
+
+// Delegación capture para mouseenter y mouseleave en tarjetas
+document.addEventListener("mouseenter", (e) => {
+  const container = e.target.closest?.(".product-media-container");
+  if (container) {
+    window.swapProductImage(container, true);
+  }
+}, true);
+
+document.addEventListener("mouseleave", (e) => {
+  const container = e.target.closest?.(".product-media-container");
+  if (container) {
+    window.swapProductImage(container, false);
+  }
+}, true);
+
+// Soporte táctil móvil para alternar imagen con un toque
+let lastTouchToggleTime = 0;
+document.addEventListener("touchstart", (e) => {
+  const container = e.target.closest(".product-media-container");
+  if (container) {
+    lastTouchToggleTime = Date.now();
+  }
+}, { passive: true });
+
+document.addEventListener("touchend", (e) => {
+  const container = e.target.closest(".product-media-container");
+  if (container && !e.target.closest("button")) {
+    if (Date.now() - lastTouchToggleTime < 400) {
+      window.swapProductImage(container, null);
+    }
+  }
+}, { passive: true });
+
+document.addEventListener("click", (e) => {
+  const container = e.target.closest(".product-media-container");
+  if (container && !e.target.closest("button")) {
+    const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || window.innerWidth < 1024;
+    if (isTouchDevice && Date.now() - lastTouchToggleTime > 500) {
+      window.swapProductImage(container, null);
+    }
+  }
+});
+
+// 4. Delegación Global de Eventos en document para evitar congelamiento de botones
+document.addEventListener("click", (e) => {
+  const target = e.target;
+  if (!target) return;
+
+  // 1. Añadir al carrito desde tarjeta de catálogo
+  const addBtn = target.closest("[data-action='add-to-cart'], button[onclick*='addToCart']");
+  if (addBtn) {
+    e.preventDefault();
+    let pId = addBtn.dataset.productId;
+    if (!pId) {
+      const match = (addBtn.getAttribute("onclick") || "").match(/addToCart\(['"]([^'"]+)['"]\)/);
+      if (match) pId = match[1];
+    }
+    if (pId && typeof window.addToCart === "function") {
+      window.addToCart(pId);
+    }
+    return;
+  }
+
+  // 2. Botón de compra en Hero Showcase
+  const heroBuyBtn = target.closest("#wz-hero-buy-btn, [data-action='hero-buy']");
+  if (heroBuyBtn) {
+    e.preventDefault();
+    if (heroSelectedSizeIdx === null || heroSelectedSizeIdx === -1) {
+      window.showStoreModal("Por favor elige una talla disponible para el Drop de la Semana.", "Selecciona una Talla");
+      return;
+    }
+    const featured = products.find((p) => p.isFeatured && p.status !== "agotado") || products.find((p) => p.media?.video && p.status !== "agotado");
+    if (featured) {
+      uiState[featured.id] = { colorIdx: 0, sizeIdx: heroSelectedSizeIdx };
+      window.addToCart(featured.id);
+    }
+    return;
+  }
+
+  // 3. Abrir / Alternar Carrito
+  const openCartBtn = target.closest("#cart-btn, #wz-sticky-cta, [data-action='open-cart'], [data-action='toggle-cart']");
+  if (openCartBtn) {
+    e.preventDefault();
+    const drawer = document.getElementById("drawer-cart");
+    if (drawer && drawer.classList.contains("open")) {
+      window.closeDrawer();
+    } else {
+      window.openDrawer();
+    }
+    return;
+  }
+
+  // 4. Cerrar Carrito
+  const closeCartBtn = target.closest("#close-drawer, #drawer-overlay, [data-action='close-cart']");
+  if (closeCartBtn) {
+    e.preventDefault();
+    window.closeDrawer();
+    return;
+  }
+
+  // 5. Eliminar item del carrito
+  const removeBtn = target.closest("[data-action='remove-cart-item'], button[onclick*='removeCartItem']");
+  if (removeBtn) {
+    e.preventDefault();
+    let idx = removeBtn.dataset.index;
+    if (idx === undefined) {
+      const match = (removeBtn.getAttribute("onclick") || "").match(/removeCartItem\((\d+)\)/);
+      if (match) idx = match[1];
+    }
+    if (idx !== undefined) {
+      window.removeCartItem(parseInt(idx, 10));
+    }
+    return;
+  }
+
+  // 6. Abrir Modal Checkout
+  const checkoutBtn = target.closest("#checkout-btn, [data-action='open-checkout']");
+  if (checkoutBtn) {
+    e.preventDefault();
+    if (!cart || cart.length === 0) {
+      window.showStoreModal("Tu carrito está vacío. Agrega una prenda antes de proceder.", "Carrito Vacío");
+      return;
+    }
+    document.getElementById("modal-checkout")?.classList.add("active");
+    window.closeDrawer();
+    return;
+  }
+
+  // 7. Cerrar Checkout
+  const closeCheckoutBtn = target.closest("#close-modal, [data-action='close-checkout']");
+  if (closeCheckoutBtn) {
+    e.preventDefault();
+    document.getElementById("modal-checkout")?.classList.remove("active");
+    return;
+  }
+
+  // 8. Confirmar pedido por WhatsApp (Final Buy)
+  const finalBuyBtn = target.closest("#final-buy-btn, [data-action='checkout-final']");
+  if (finalBuyBtn) {
+    e.preventDefault();
+    processCheckout();
+    return;
+  }
+
+  // 9. Aplicar cupón
+  const applyCouponBtn = target.closest("#apply-coupon, [data-action='apply-coupon']");
+  if (applyCouponBtn) {
+    e.preventDefault();
+    applyCouponLogic();
+    return;
+  }
+
+  // 10. Guardar carrito
+  const saveCartBtn = target.closest("#btn-save-cart, [data-action='save-cart']");
+  if (saveCartBtn) {
+    e.preventDefault();
+    saveCart();
+    window.showStoreModal("El contenido de tu compra quedó guardado de forma segura en este navegador.", "Carrito Guardado");
+    return;
+  }
+
+  // 11. Compartir carrito
+  const shareCartBtn = target.closest("#btn-share-cart, [data-action='share-cart']");
+  if (shareCartBtn) {
+    e.preventDefault();
+    shareCartUrl();
+    return;
+  }
+
+  // 12. Filtros de categoría principal
+  const catBtn = target.closest("[data-action='filter-category'], .cat-pill, button[onclick*='handleParentCategory']");
+  if (catBtn) {
+    e.preventDefault();
+    let cat = catBtn.dataset.category;
+    if (!cat) {
+      const match = (catBtn.getAttribute("onclick") || "").match(/handleParentCategory\(['"]([^'"]+)['"]\)/);
+      if (match) cat = match[1];
+      else cat = catBtn.textContent.trim();
+    }
+    if (cat) window.handleParentCategory(cat);
+    return;
+  }
+
+  // 13. Filtros de género
+  const genderBtn = target.closest("[data-action='filter-gender'], .gender-pill, button[onclick*='applyGenderFilter']");
+  if (genderBtn) {
+    e.preventDefault();
+    let gen = genderBtn.dataset.gender;
+    if (!gen) {
+      const match = (genderBtn.getAttribute("onclick") || "").match(/applyGenderFilter\(['"]([^'"]+)['"]\)/);
+      if (match) gen = match[1];
+      else gen = genderBtn.textContent.trim().toLowerCase();
+    }
+    if (gen) window.applyGenderFilter(gen);
+    return;
+  }
+
+  // 14. Selección de talla en tarjeta
+  const sizeBtn = target.closest("[data-action='select-size'], button[onclick*='selectSize']");
+  if (sizeBtn) {
+    e.preventDefault();
+    let pId = sizeBtn.dataset.productId;
+    let sIdx = sizeBtn.dataset.sizeIndex;
+    if (!pId || sIdx === undefined) {
+      const match = (sizeBtn.getAttribute("onclick") || "").match(/selectSize\(['"]([^'"]+)['"]\s*,\s*(\d+)\)/);
+      if (match) {
+        pId = match[1];
+        sIdx = match[2];
+      }
+    }
+    if (pId && sIdx !== undefined) {
+      window.selectSize(pId, parseInt(sIdx, 10));
+    }
+    return;
+  }
+
+  // 15. Selección de talla en Hero
+  const heroSizeBtn = target.closest("[data-action='select-hero-size'], button[onclick*='selectHeroSize']");
+  if (heroSizeBtn) {
+    e.preventDefault();
+    let sIdx = heroSizeBtn.dataset.sizeIndex;
+    if (sIdx === undefined) {
+      const match = (heroSizeBtn.getAttribute("onclick") || "").match(/selectHeroSize\((\d+)\)/);
+      if (match) sIdx = match[1];
+    }
+    if (sIdx !== undefined) {
+      window.selectHeroSize(parseInt(sIdx, 10));
+    }
+    return;
+  }
+
+  // 16. Calculadora de talla
+  const calcBtn = target.closest("[data-action='calc-size'], button[onclick*='calculateRecommendedSize']");
+  if (calcBtn) {
+    e.preventDefault();
+    calculateRecommendedSize();
+    return;
+  }
+
+  // 17. Botón cerrar modal de tienda
+  const closeModalBtn = target.closest("[data-action='close-store-modal'], #wz-store-modal-close");
+  if (closeModalBtn) {
+    e.preventDefault();
+    window.closeStoreModal();
+    return;
+  }
+});
+
 // Arrancar al cargar la vista con soporte Sticky Mobile y Media Observers
 document.addEventListener("DOMContentLoaded", () => {
   initApp();
   recoverCartFromUrl();
-
-  // 1. Fallback visual universal en onerror para etiquetas <img> sin SVG roto
-  window.handleImageError = (imgEl) => {
-    if (!imgEl) return;
-    imgEl.onerror = null;
-    const parent = imgEl.parentElement;
-    if (parent) {
-      const skeleton = parent.querySelector(".skeleton-placeholder");
-      if (skeleton) skeleton.remove();
-
-      const placeholder = document.createElement("div");
-      placeholder.className = "absolute inset-0 w-full h-full bg-slate-950 flex flex-col items-center justify-center text-slate-600 p-4 text-center select-none z-10 border border-slate-800/60";
-      placeholder.innerHTML = `
-        <svg class="w-10 h-10 mb-2 stroke-slate-500 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-        </svg>
-        <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">WZSTORE PRENDA</span>
-      `;
-      imgEl.classList.add("hidden");
-      parent.appendChild(placeholder);
-    }
-  };
-
-  // 2. Modal Centrado con Backdrop-Blur para reemplazar alert() nativos
-  window.showStoreModal = (mensaje, titulo = "WZSTORE Colombia") => {
-    let modal = document.getElementById("wz-store-modal");
-    if (!modal) {
-      modal = document.createElement("div");
-      modal.id = "wz-store-modal";
-      modal.className = "fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md opacity-0 pointer-events-none transition-all duration-300";
-      modal.innerHTML = `
-        <div class="bg-slate-900 border border-slate-800 text-white rounded-2xl max-w-md w-full p-6 shadow-2xl transform scale-95 transition-transform duration-300 relative">
-          <button type="button" onclick="closeStoreModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white text-xl font-bold w-8 h-8 rounded-full hover:bg-slate-800 flex items-center justify-center transition-colors">&times;</button>
-          <div class="flex items-center gap-3 mb-4">
-            <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center font-black text-sm tracking-wider">WZ</div>
-            <h3 id="wz-store-modal-title" class="text-base font-bold text-white tracking-wide"></h3>
-          </div>
-          <p id="wz-store-modal-body" class="text-slate-300 text-xs leading-relaxed mb-6"></p>
-          <div class="flex justify-end">
-            <button type="button" onclick="closeStoreModal()" class="bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold px-6 py-2.5 rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-emerald-500/20">Aceptar</button>
-          </div>
-        </div>
-      `;
-      document.body.appendChild(modal);
-      modal.addEventListener("click", (e) => {
-        if (e.target === modal) window.closeStoreModal();
-      });
-    }
-
-    const titleEl = document.getElementById("wz-store-modal-title");
-    const bodyEl = document.getElementById("wz-store-modal-body");
-    if (titleEl) titleEl.textContent = titulo;
-    if (bodyEl) bodyEl.textContent = mensaje;
-
-    modal.classList.remove("opacity-0", "pointer-events-none");
-    const container = modal.querySelector("div");
-    if (container) container.classList.remove("scale-95");
-  };
-
-  window.closeStoreModal = () => {
-    const modal = document.getElementById("wz-store-modal");
-    if (modal) {
-      modal.classList.add("opacity-0", "pointer-events-none");
-      const container = modal.querySelector("div");
-      if (container) container.classList.add("scale-95");
-    }
-  };
-
-  // Redireccionar alert() nativo al nuevo modal centrado
-  window.alert = (msg) => window.showStoreModal(msg);
-
-  // 3. Hover y Toque Táctil Mobile en Tarjetas de Producto (Imágenes frontal <-> posterior)
-  const swapProductImage = (container, forceSecond = null) => {
-    if (!container) return;
-    const img = container.querySelector("img");
-    if (!img) return;
-
-    const prodId = container.dataset.productId || container.getAttribute("data-id");
-    const prod = products.find((p) => String(p.id) === String(prodId));
-    if (!prod) return;
-
-    const images = (prod.media?.images && prod.media.images.length > 0)
-      ? prod.media.images
-      : (prod.imageUrl ? [prod.imageUrl] : []);
-
-    if (images.length < 2) return;
-
-    if (!img.dataset.frontSrc) {
-      img.dataset.frontSrc = images[0];
-      img.dataset.backSrc = images[1];
-    }
-
-    if (forceSecond === true) {
-      img.src = img.dataset.backSrc;
-    } else if (forceSecond === false) {
-      img.src = img.dataset.frontSrc;
-    } else {
-      img.src = img.src === img.dataset.backSrc ? img.dataset.frontSrc : img.dataset.backSrc;
-    }
-  };
-
-  document.addEventListener("mouseover", (e) => {
-    const container = e.target.closest(".product-media-container");
-    if (container && window.innerWidth >= 1024) {
-      swapProductImage(container, true);
-    }
-  });
-
-  document.addEventListener("mouseout", (e) => {
-    const container = e.target.closest(".product-media-container");
-    if (container && window.innerWidth >= 1024) {
-      swapProductImage(container, false);
-    }
-  });
-
-  // Alternar imagen con toque en pantallas móviles
-  document.addEventListener("touchstart", (e) => {
-    const container = e.target.closest(".product-media-container");
-    if (container && window.innerWidth < 1024) {
-      swapProductImage(container);
-    }
-  }, { passive: true });
-
-  // 4. Delegación Global de Eventos (prevent freeze por inactividad / re-render)
-  document.addEventListener("click", (e) => {
-    const target = e.target;
-
-    // Botones de añadir al carrito
-    const addBtn = target.closest("[data-action='add-to-cart']");
-    if (addBtn) {
-      const pId = addBtn.dataset.productId;
-      if (pId && typeof window.addToCart === "function") {
-        window.addToCart(pId);
-      }
-      return;
-    }
-
-    // Filtros de categoría
-    const catBtn = target.closest("[data-action='filter-category']");
-    if (catBtn) {
-      const cat = catBtn.dataset.category;
-      if (cat && typeof window.handleParentCategory === "function") {
-        window.handleParentCategory(cat);
-      }
-      return;
-    }
-
-    // Filtros de género
-    const genderBtn = target.closest("[data-action='filter-gender']");
-    if (genderBtn) {
-      const gen = genderBtn.dataset.gender;
-      if (gen && typeof window.applyGenderFilter === "function") {
-        window.applyGenderFilter(gen);
-      }
-      return;
-    }
-
-    // Control del drawer del carrito
-    const cartToggleBtn = target.closest("[data-action='toggle-cart']");
-    if (cartToggleBtn) {
-      const drawer = document.getElementById("drawer-cart");
-      if (drawer && drawer.classList.contains("open")) {
-        if (typeof window.closeDrawer === "function") window.closeDrawer();
-      } else {
-        if (typeof window.openDrawer === "function") window.openDrawer();
-      }
-    }
-  });
   setupEventListeners();
   initMobileVideoObserver();
 
@@ -625,16 +868,17 @@ const renderFeaturedHero = () => {
           ? "border-emerald-500 bg-emerald-500 text-black shadow-lg shadow-emerald-500/20"
           : "border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500";
 
-        return `<button type="button" ${isOutOfStock ? "disabled" : ""} onclick="selectHeroSize(${idx})" class="${baseClass} ${stateClass}">${s.size}</button>`;
+        return `<button type="button" ${isOutOfStock ? "disabled" : ""} data-action="select-hero-size" data-size-index="${idx}" onclick="selectHeroSize(${idx})" class="${baseClass} ${stateClass}">${s.size}</button>`;
       })
       .join("");
   }
 
   // Adición directa al carrito sincronizando la talla escogida
   if (buyBtn) {
+    buyBtn.setAttribute("data-action", "hero-buy");
     buyBtn.onclick = () => {
       if (heroSelectedSizeIdx === null || heroSelectedSizeIdx === -1) {
-        showNotificationModal("Selecciona una Talla", "Por favor elige una talla disponible para el Drop de la Semana.");
+        window.showStoreModal("Por favor elige una talla disponible para el Drop de la Semana.", "Selecciona una Talla");
         return;
       }
       uiState[featured.id] = { colorIdx: 0, sizeIdx: heroSelectedSizeIdx };
@@ -686,7 +930,7 @@ const renderCatalog = (catalogData = null) => {
           else
             classes +=
               "border-slate-700 text-slate-300 hover:border-slate-400 ";
-          return `<button ${isDisabled ? "disabled" : ""} onclick="selectSize('${p.id}', ${idx})" class="${classes}">${s.size}</button>`;
+          return `<button ${isDisabled ? "disabled" : ""} data-action="select-size" data-product-id="${p.id}" data-size-index="${idx}" onclick="selectSize('${p.id}', ${idx})" class="${classes}">${s.size}</button>`;
         })
         .join("");
 
@@ -714,6 +958,19 @@ const renderCatalog = (catalogData = null) => {
         }
       }
 
+      // Extracción de galería de fotos (soporta media.images, imágenes, imagenes, images, imageUrl)
+      const prodImages = (p.media?.images && p.media.images.length > 0)
+        ? p.media.images
+        : (Array.isArray(p.imagenes) && p.imagenes.length > 0
+            ? p.imagenes
+            : (Array.isArray(p.images) && p.images.length > 0
+                ? p.images
+                : (p.imageUrl ? [p.imageUrl] : [])));
+
+      const frontImg = prodImages[0] || p.imageUrl || 'https://images.unsplash.com/photo-1581636625402-29f2a01222ce';
+      const backImg = prodImages.length >= 2 ? prodImages[1] : '';
+      const hasMultiplePhotos = Boolean(backImg);
+
       return `
     <div class="relative bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col group transition-all duration-300 ${isAgotado ? 'opacity-60 grayscale' : ''}">
       ${scarcityBadgeHtml}
@@ -729,18 +986,28 @@ const renderCatalog = (catalogData = null) => {
       `
           : ""
       }
-      <div class="product-media-container relative h-64 bg-slate-950 overflow-hidden" onmouseenter="${!isAgotado ? `playProductVideo(this, '${p.id}')` : ''}" onmouseleave="${!isAgotado ? `stopProductVideo(this, '${p.id}')` : ''}">
+      <div 
+        class="product-media-container relative h-64 bg-slate-950 overflow-hidden ${hasMultiplePhotos ? 'cursor-pointer' : ''}" 
+        data-product-id="${p.id}"
+        data-front-src="${frontImg}"
+        ${hasMultiplePhotos ? `data-back-src="${backImg}"` : ''}
+        onmouseenter="window.handleCardMouseEnter(this, '${p.id}')" 
+        onmouseleave="window.handleCardMouseLeave(this, '${p.id}')"
+      >
         <!-- Skeleton loader animado de fondo -->
         <div class="skeleton-placeholder absolute inset-0 bg-slate-800 animate-pulse transition-opacity duration-300 pointer-events-none"></div>
         <!-- Imagen con decodificación asíncrona desacoplada del hilo principal -->
         <img 
-          src="${p.imageUrl || (p.media?.images && p.media.images[0]) || 'https://images.unsplash.com/photo-1581636625402-29f2a01222ce'}" 
+          src="${frontImg}" 
           alt="${sanitizeInput(p.name)}" 
+          data-front-src="${frontImg}"
+          ${hasMultiplePhotos ? `data-back-src="${backImg}"` : ''}
+          data-current-view="front"
           class="w-full h-full object-cover transition-all duration-300 group-hover:scale-105 opacity-0" 
           loading="lazy"
           decoding="async"
           onload="this.classList.remove('opacity-0'); const sk = this.previousElementSibling; if(sk) sk.remove();"
-          onerror="this.src='https://images.unsplash.com/photo-1581636625402-29f2a01222ce'; this.classList.remove('opacity-0'); const sk = this.previousElementSibling; if(sk) sk.remove();"
+          onerror="window.handleImageError(this)"
         >
       </div>
       <div class="p-4 flex flex-col flex-grow">
@@ -754,7 +1021,7 @@ const renderCatalog = (catalogData = null) => {
         ${
           !isAgotado
             ? `
-          <button onclick="addToCart('${p.id}')" class="mt-auto w-full bg-emerald-500 text-black font-bold py-2 rounded text-xs uppercase tracking-wider hover:bg-emerald-400 transition-colors">Añadir al Carro</button>
+          <button data-action="add-to-cart" data-product-id="${p.id}" onclick="addToCart('${p.id}')" class="mt-auto w-full bg-emerald-500 text-black font-bold py-2 rounded text-xs uppercase tracking-wider hover:bg-emerald-400 transition-colors">Añadir al Carro</button>
         `
             : `
           <button disabled class="mt-auto w-full bg-slate-800 text-slate-500 font-bold py-2 rounded text-xs uppercase tracking-wider cursor-not-allowed pointer-events-none">Agotado</button>
@@ -907,13 +1174,13 @@ const updateCartUI = () => {
 
     cartItemsContainer.innerHTML += `
       <div class="flex gap-4 mb-4 bg-[#1e293b] p-3 rounded-lg relative">
-        <img src="${item.img}" class="w-16 h-16 object-cover rounded" alt="${sanitizeInput(item.name)}">
+        <img src="${item.img}" class="w-16 h-16 object-cover rounded" alt="${sanitizeInput(item.name)}" onerror="window.handleImageError(this)">
         <div class="flex-1">
           <p class="text-sm font-bold text-white leading-tight">${sanitizeInput(item.name)}</p>
           <p class="text-xs text-gray-400">${sanitizeInput(item.color)} | Talla: ${sanitizeInput(item.size)}</p>
           <p class="text-sm text-green-400 mt-1">$${verifiedUnitPrice.toLocaleString("es-CO")} x${safeQty}</p>
         </div>
-        <button onclick="removeCartItem(${idx})" class="absolute top-2 right-2 text-red-500 hover:text-red-400" aria-label="Eliminar prenda"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        <button data-action="remove-cart-item" data-index="${idx}" onclick="removeCartItem(${idx})" class="absolute top-2 right-2 text-red-500 hover:text-red-400" aria-label="Eliminar prenda"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
       </div>
     `;
   });
@@ -1366,25 +1633,6 @@ window.openSupportChat = (customContext = "") => {
   window.open(supportUrl, "_blank", "noopener,noreferrer");
 };
 
-// Controlador de notificaciones modales flotantes no invasivas
-window.showNotificationModal = (title, message) => {
-  const modal = document.getElementById("wz-alert-modal");
-  const titleEl = document.getElementById("wz-alert-title");
-  const bodyEl = document.getElementById("wz-alert-body");
-
-  if (titleEl) titleEl.textContent = title;
-  if (bodyEl) bodyEl.textContent = message;
-
-  if (modal) {
-    modal.classList.remove("hidden");
-    modal.classList.add("flex");
-  }
-};
-
-window.closeNotificationModal = () => {
-  const modal = document.getElementById("wz-alert-modal");
-  if (modal) {
-    modal.classList.add("hidden");
-    modal.classList.remove("flex");
-  }
-};
+// Controlador unificado del Modal de Tienda (reemplazo de alertas nativas)
+window.showNotificationModal = (title, message) => window.showStoreModal(message, title);
+window.closeNotificationModal = () => window.closeStoreModal();

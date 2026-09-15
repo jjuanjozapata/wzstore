@@ -1,3 +1,8 @@
+// Configuración del cliente Supabase
+const SUPABASE_URL = "TU_SUPABASE_URL";
+const SUPABASE_KEY = "TU_SUPABASE_ANON_KEY";
+const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
 // Sanitización XSS Central
 // Sanitizador contra Vector XSS por codificación de entidades completas
 const sanitizeInput = (str) => {
@@ -209,26 +214,44 @@ const syncDatabaseVersion = () => {
 // Sincronización inmediata al evaluar el script
 syncDatabaseVersion();
 
-// Inicialización blindada contra fallos de almacenamiento o datos corruptos
-const initApp = () => {
-  // Asegurar sincronización de versión al cargar la página
-  syncDatabaseVersion();
-
+// Inicialización blindada con consulta prioritaria a Supabase y respaldo offline
+const initApp = async () => {
   let loadedProducts = null;
-  const rawProducts = safeStorage.getItem("wz_products") || safeStorage.getItem("wz_core_products");
 
-  if (rawProducts) {
+  // 1. Consulta prioritaria a la tabla 'productos' de Supabase para catálogo fresco multi-dispositivo
+  if (supabase) {
     try {
-      const parsed = JSON.parse(rawProducts);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        loadedProducts = parsed;
+      const { data, error } = await supabase.from('productos').select('*');
+      if (!error && Array.isArray(data) && data.length > 0) {
+        loadedProducts = data;
+        // Mantener localStorage únicamente como respaldo offline
+        safeStorage.setItem("wz_core_products", JSON.stringify(loadedProducts));
+        safeStorage.setItem("wz_products", JSON.stringify(loadedProducts));
+      } else if (error) {
+        console.warn("[WZSTORE] Error consultando 'productos' en Supabase:", error);
       }
-    } catch (e) {
-      console.warn("[WZSTORE] Error parseando productos:", e);
+    } catch (err) {
+      console.warn("[WZSTORE] Fallo de conexión con Supabase:", err);
     }
   }
 
-  // Si no hay datos, haz que consuma de inmediato el listado base sin quedarse en blanco
+  // 2. Respaldo offline si no se obtuvieron datos desde Supabase
+  if (!loadedProducts || loadedProducts.length === 0) {
+    syncDatabaseVersion();
+    const rawProducts = safeStorage.getItem("wz_core_products") || safeStorage.getItem("wz_products");
+    if (rawProducts) {
+      try {
+        const parsed = JSON.parse(rawProducts);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          loadedProducts = parsed;
+        }
+      } catch (e) {
+        console.warn("[WZSTORE] Error parseando productos de caché local:", e);
+      }
+    }
+  }
+
+  // 3. Fallback inicial si la caché está vacía
   if (!loadedProducts || loadedProducts.length === 0) {
     loadedProducts = getBaseDatabase();
     safeStorage.setItem("wz_products", JSON.stringify(loadedProducts));
@@ -688,8 +711,8 @@ document.addEventListener("click", (e) => {
 });
 
 // Arrancar al cargar la vista con soporte Sticky Mobile y Media Observers
-document.addEventListener("DOMContentLoaded", () => {
-  initApp();
+document.addEventListener("DOMContentLoaded", async () => {
+  await initApp();
   recoverCartFromUrl();
   setupEventListeners();
   initMobileVideoObserver();

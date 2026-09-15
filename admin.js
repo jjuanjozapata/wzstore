@@ -3,6 +3,11 @@
  * Lógica de negocio, autenticación y análisis de datos en memoria local.
  */
 
+// Configuración del cliente Supabase
+const SUPABASE_URL = "TU_SUPABASE_URL";
+const SUPABASE_KEY = "TU_SUPABASE_ANON_KEY";
+const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
 // ==========================================
 // 1. SISTEMA DE AUTENTICACIÓN
 // ==========================================
@@ -29,13 +34,14 @@ const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutos de inactividad
 // Variable global en memoria para Safari en iPhone y persistencia de sesión
 window.wzAuth = window.wzAuth || false;
 try {
-  if (sessionStorage.getItem('wz_logged') === 'true') {
+  if (sessionStorage.getItem('wz_logged') === 'true' || localStorage.getItem('wz_logged') === 'true') {
     window.wzAuth = true;
   }
 } catch (e) {}
 
 // Credenciales maestras indestructibles en código
 const MASTER_ADMINS = [
+  { user: 'juan', pass: 'juan1234' },
   { user: 'admin', pass: 'admin123' },
   { user: 'wzadmin', pass: 'wz2026' }
 ];
@@ -62,7 +68,7 @@ const MASTER_CREDENTIALS = [
   },
   {
     username: "juan",
-    password: "wzstore2026",
+    password: "juan1234",
     passwordHash: "99e289bf65d4911d8d5dfbcabdd0cfc5108d6c70fb9073c6dc20d23fb5f782f2",
     role: "admin",
     createdAt: 1726000000000
@@ -147,7 +153,10 @@ const getCurrentSession = () => {
     return inMemorySession;
   }
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
+    let raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) {
+      raw = localStorage.getItem(SESSION_KEY);
+    }
     if (raw) {
       const data = JSON.parse(raw);
       if (data && (now - (data.timestamp || 0) <= SESSION_TIMEOUT)) {
@@ -157,12 +166,12 @@ const getCurrentSession = () => {
         return inMemorySession;
       }
     }
-    if (sessionStorage.getItem('wz_logged') === 'true') {
+    if (sessionStorage.getItem('wz_logged') === 'true' || localStorage.getItem('wz_logged') === 'true') {
       window.wzAuth = true;
       isAuth = true;
       if (!inMemorySession) {
         inMemorySession = {
-          username: "admin",
+          username: "juan",
           role: "admin",
           timestamp: now
         };
@@ -177,7 +186,7 @@ const getCurrentSession = () => {
   }
   if (isAuth || window.wzAuth) {
     inMemorySession = {
-      username: "admin",
+      username: "juan",
       role: "admin",
       timestamp: now
     };
@@ -193,6 +202,8 @@ const setSession = (sessionData) => {
   try {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
     sessionStorage.setItem('wz_logged', 'true');
+    localStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
+    localStorage.setItem('wz_logged', 'true');
   } catch {
     // Si Safari bloquea sessionStorage, window.wzAuth e inMemorySession mantienen la sesión activa
   }
@@ -205,6 +216,8 @@ const clearSession = () => {
   try {
     sessionStorage.removeItem(SESSION_KEY);
     sessionStorage.removeItem('wz_logged');
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem('wz_logged');
   } catch {
     // Ignorar si sessionStorage no está accesible
   }
@@ -253,7 +266,11 @@ const applyRolePermissions = () => {
 // Control de sesión activa de 30 min sobre el contenedor #wz-login-overlay
 function checkAuth() {
   const isLogged = window.wzAuth === true || (() => {
-    try { return sessionStorage.getItem('wz_logged') === 'true'; } catch(e) { return false; }
+    try {
+      return sessionStorage.getItem('wz_logged') === 'true' || localStorage.getItem('wz_logged') === 'true';
+    } catch(e) {
+      return false;
+    }
   })();
 
   const sessionData = getCurrentSession();
@@ -266,15 +283,18 @@ function checkAuth() {
     if (overlay) overlay.classList.remove("hidden");
     if (dashboard) dashboard.classList.add("hidden");
   } else {
-    // Mantener sesión activa tanto en memoria como en sessionStorage
+    // Mantener sesión activa tanto en memoria como en sessionStorage y localStorage
     window.wzAuth = true;
-    try { sessionStorage.setItem('wz_logged', 'true'); } catch(e) {}
+    try {
+      sessionStorage.setItem('wz_logged', 'true');
+      localStorage.setItem('wz_logged', 'true');
+    } catch(e) {}
     if (sessionData) {
       sessionData.timestamp = now;
       setSession(sessionData);
     } else {
       setSession({
-        username: "admin",
+        username: "juan",
         role: "admin",
         timestamp: now
       });
@@ -345,7 +365,7 @@ const initializeUsersStore = () => {
   const canonicalAccounts = [
     { username: "admin", password: "admin123", passwordHash: "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9", role: "admin", createdAt: 1726000000000 },
     { username: "admin", password: "wzstore2026", passwordHash: "4dfc0fcf9c5ae52f9b8823ce9754f9a5d1b702ecffcfc07ef9ad7ad5bf0f946d", role: "admin", createdAt: 1726000000000 },
-    { username: "juan", password: "wzstore2026", passwordHash: "99e289bf65d4911d8d5dfbcabdd0cfc5108d6c70fb9073c6dc20d23fb5f782f2", role: "admin", createdAt: 1726000000000 },
+    { username: "juan", password: "juan1234", passwordHash: "99e289bf65d4911d8d5dfbcabdd0cfc5108d6c70fb9073c6dc20d23fb5f782f2", role: "admin", createdAt: 1726000000000 },
     { username: "monitor", password: "monitor2026", passwordHash: "64d0dc372f88421c60633b4976ea65f3d45e054a7c87c04ff2b7ea08d7457bca", role: "worker", createdAt: 1726000000000 }
   ];
 
@@ -400,12 +420,12 @@ if (loginForm) {
     const passwordEl = document.getElementById("password");
     const errorEl = document.getElementById("login-error");
 
-    // Limpia los valores con .trim().toLowerCase()
+    // Limpia espacios accidentales con .trim().toLowerCase() en el usuario y .trim() en la clave
     const u = usernameEl ? usernameEl.value.trim().toLowerCase() : "";
-    const p = passwordEl ? passwordEl.value.trim().toLowerCase() : "";
-    const pRaw = passwordEl ? passwordEl.value.trim() : "";
+    const p = passwordEl ? passwordEl.value.trim() : "";
+    const pLower = passwordEl ? passwordEl.value.trim().toLowerCase() : "";
 
-    if (!u || (!p && !pRaw)) {
+    if (!u || !p) {
       if (errorEl) {
         errorEl.textContent = "Por favor, completa todos los campos.";
         errorEl.classList.remove("hidden");
@@ -415,12 +435,11 @@ if (loginForm) {
     }
 
     try {
-      // 1. Validar si las credenciales coinciden con MASTER_ADMINS
+      // 1. Validar de forma prioritaria si las credenciales coinciden con MASTER_ADMINS
       const masterFound = MASTER_ADMINS.find((m) => {
         const mUser = (m.user || "").trim().toLowerCase();
-        const mPass = (m.pass || "").trim().toLowerCase();
-        const mPassRaw = (m.pass || "").trim();
-        return mUser === u && (mPass === p || mPassRaw === pRaw);
+        const mPass = (m.pass || "").trim();
+        return mUser === u && (mPass === p || mPass.toLowerCase() === pLower);
       });
 
       let isMatch = !!masterFound;
@@ -441,8 +460,8 @@ if (loginForm) {
         let incomingHash = "";
         let incomingHashRaw = "";
         try {
-          incomingHash = await sha256Hex(p);
-          incomingHashRaw = await sha256Hex(pRaw);
+          incomingHash = await sha256Hex(pLower);
+          incomingHashRaw = await sha256Hex(p);
         } catch (e) {}
 
         const localFound = localUsers.find((usr) => {
@@ -452,7 +471,7 @@ if (loginForm) {
           const usrPass = (usr.password || usr.pass || "").trim().toLowerCase();
           const usrPassRaw = (usr.password || usr.pass || "").trim();
 
-          if (usrPass && (usrPass === p || usrPassRaw === pRaw)) return true;
+          if (usrPass && (usrPass === p || usrPassRaw === p || usrPass === pLower)) return true;
           if (usr.passwordHash && (
             (incomingHash && usr.passwordHash === incomingHash) ||
             (incomingHashRaw && usr.passwordHash === incomingHashRaw)
@@ -468,16 +487,17 @@ if (loginForm) {
         }
       }
 
-      // Si coincide con cualquiera de los dos, concede acceso inmediato
+      // Si coincide con cualquiera de los dos, concede acceso inmediato y persiste sin rebotes
       if (isMatch) {
         try {
           localStorage.removeItem("wz_admin_lockout");
         } catch (err) {}
 
-        // Guarda la sesión tanto en sessionStorage ('wz_logged': 'true') como en variable global en memoria (window.wzAuth = true)
+        // Guarda la sesión en memoria, sessionStorage y localStorage para evitar rebotes
         window.wzAuth = true;
         try {
           sessionStorage.setItem("wz_logged", "true");
+          localStorage.setItem("wz_logged", "true");
         } catch (err) {}
 
         setSession({
@@ -580,33 +600,40 @@ const closeUsersBtn = document.getElementById("wz-close-users-btn");
 const createUserForm = document.getElementById("wz-create-user-form");
 
 const renderUsersTable = () => {
-  const tbody = document.getElementById("wz-users-table-body");
-  if (!tbody) return;
+  const container = document.getElementById("wz-users-table-body");
+  if (!container) return;
 
   const users = getStoredUsers();
   const session = getCurrentSession();
 
-  tbody.innerHTML = users
+  container.innerHTML = users
     .map((u) => {
       const isCurrent = session?.username?.toLowerCase() === u.username.toLowerCase();
       const badgeColor = u.role === "admin" ? "text-emerald-400 bg-emerald-950/40 border border-emerald-800" : "text-amber-400 bg-amber-950/40 border border-amber-800";
       return `
-        <tr class="hover:bg-dark transition-colors">
-          <td class="p-3 font-semibold text-white flex items-center gap-2">
-            <span>${u.username}</span>
-            ${isCurrent ? '<span class="text-[10px] text-gray-500 font-normal">(Sesión actual)</span>' : ""}
-          </td>
-          <td class="p-3">
-            <span class="text-[10px] font-bold px-2 py-0.5 rounded uppercase ${badgeColor}">${u.role === "admin" ? "Administrador" : "Trabajador"}</span>
-          </td>
-          <td class="p-3 text-right">
+        <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition-all w-full">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-xs text-white uppercase shrink-0">
+              ${(u.username || 'U')[0]}
+            </div>
+            <div>
+              <p class="font-bold text-white text-sm leading-tight flex items-center gap-1.5">
+                <span>${u.username}</span>
+                ${isCurrent ? '<span class="text-[10px] text-gray-400 font-normal">(Tú)</span>' : ""}
+              </p>
+              <span class="text-[9px] font-bold px-2 py-0.5 rounded uppercase mt-0.5 inline-block ${badgeColor}">
+                ${u.role === "admin" ? "Administrador" : "Trabajador"}
+              </span>
+            </div>
+          </div>
+          <div>
             ${
               !isCurrent
-                ? `<button type="button" onclick="deleteUserAccount('${u.username}')" class="text-red-400 hover:text-red-300 font-bold">Eliminar</button>`
-                : '<span class="text-gray-600">-</span>'
+                ? `<button type="button" onclick="deleteUserAccount('${u.username}')" class="px-3 py-1.5 bg-red-950/40 border border-red-800/60 hover:bg-red-900/60 text-red-400 hover:text-red-200 font-semibold rounded-lg text-xs transition-colors cursor-pointer">Eliminar</button>`
+                : '<span class="text-xs text-gray-500 font-medium px-2 py-1">Activo</span>'
             }
-          </td>
-        </tr>
+          </div>
+        </div>
       `;
     })
     .join("");
@@ -878,18 +905,23 @@ window.garbageCollector = function () {
   });
 };
 
-// Renderizado de tabla con atributos data para delegación segura de eventos
+// Renderizado de catálogo e inventario en tarjetas verticales responsive (estilo App nativa)
 function renderInventoryTable() {
   const products = loadProducts();
-  const tbody = document.getElementById("inventory-table-body");
-  if (!tbody) return;
+  const container = document.getElementById("inventory-table-body");
+  if (!container) return;
 
   if (products.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="text-center p-6 text-gray-500">El catálogo está vacío.</td></tr>`;
+    container.innerHTML = `
+      <div class="flex flex-col items-center justify-center p-8 bg-card border border-gray-800 rounded-2xl text-center w-full">
+        <p class="text-gray-400 font-medium text-sm">El catálogo está vacío.</p>
+        <p class="text-gray-600 text-xs mt-1">Presiona "Añadir Prenda" para registrar tu primer producto.</p>
+      </div>
+    `;
     return;
   }
 
-  tbody.innerHTML = products
+  container.innerHTML = products
     .map((p) => {
       let totalStock = 0;
       p.variants?.forEach((v) => {
@@ -899,51 +931,83 @@ function renderInventoryTable() {
       let statusText = "";
 
       if (!isAvailable) {
-        statusText = `<span class="text-red-500 font-bold">AGOTADO (Apagado)</span>`;
+        statusText = `<span class="text-red-400 font-bold bg-red-950/40 border border-red-800/60 px-2.5 py-1 rounded-lg text-xs">AGOTADO</span>`;
       } else if (totalStock < 3) {
-        statusText = `<span class="text-amber-400 font-extrabold bg-amber-950/60 border border-amber-800/80 px-2 py-0.5 rounded text-[11px] animate-pulse">⚠️ CRÍTICO: ${totalStock} unds</span>`;
+        statusText = `<span class="text-amber-400 font-extrabold bg-amber-950/60 border border-amber-800/80 px-2.5 py-1 rounded-lg text-xs animate-pulse">⚠️ CRÍTICO: ${totalStock} unds</span>`;
       } else {
-        statusText = `<span class="text-green-400 font-semibold">${totalStock} unds</span>`;
+        statusText = `<span class="text-emerald-400 font-bold bg-emerald-950/40 border border-emerald-800/60 px-2.5 py-1 rounded-lg text-xs">${totalStock} unds</span>`;
       }
       
       const safeId = String(p.id);
       const displayId = safeId.includes("-") ? safeId.split("-")[1] : safeId;
 
+      // Variantes organizadas como chips táctiles de visualización inmediata
+      let variantsHtml = "";
+      if (Array.isArray(p.variants) && p.variants.length > 0) {
+        variantsHtml = `<div class="flex flex-wrap gap-1.5 pt-2 border-t border-gray-800/80 w-full">`;
+        p.variants.forEach((v) => {
+          if (Array.isArray(v.sizes)) {
+            v.sizes.forEach((s) => {
+              const stockNum = Number(s.stock) || 0;
+              const stockColor = stockNum === 0 ? "text-red-400" : stockNum < 3 ? "text-amber-400" : "text-emerald-400";
+              variantsHtml += `
+                <div class="inline-flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 px-2.5 py-1 rounded-xl text-xs text-slate-300">
+                  ${v.color && v.color !== 'Único' ? `<span class="w-2 h-2 rounded-full" style="background-color: ${v.colorHex || '#10b981'}"></span><span class="text-slate-400 font-medium">${v.color}</span> · ` : ''}
+                  <span class="font-bold text-white">Talla ${s.size}</span>
+                  <span class="text-slate-600">:</span>
+                  <span class="${stockColor} font-bold font-mono">${stockNum}</span>
+                </div>
+              `;
+            });
+          }
+        });
+        variantsHtml += `</div>`;
+      }
+
       return `
-        <tr class="hover:bg-dark transition-colors group">
-          <td class="p-4 flex items-center gap-3">
-            <img src="${p.imageUrl || (p.media?.images && p.media.images[0]) || 'https://images.unsplash.com/photo-1581636625402-29f2a01222ce'}" class="w-10 h-10 object-cover rounded border border-gray-700" alt="${p.name}">
-            <div>
-              <p class="font-bold text-white truncate max-w-[200px]">${p.name}</p>
-              <div class="flex items-center gap-1.5 flex-wrap">
-                <span class="text-xs text-gray-500">${displayId}</span>
-                ${(p.badge || p.tag) ? `<span class="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${String(p.badge || p.tag).toLowerCase().includes('agotan') ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40' : 'bg-slate-900 text-yellow-300 border border-yellow-500/40'}">${p.badge || p.tag}</span>` : ''}
+        <div class="flex flex-col w-full p-4 rounded-2xl bg-card border border-gray-800 hover:border-gray-700 transition-all shadow-lg space-y-3">
+          <div class="flex items-start gap-3 w-full">
+            <img src="${p.imageUrl || (p.media?.images && p.media.images[0]) || 'https://images.unsplash.com/photo-1581636625402-29f2a01222ce'}" class="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-xl border border-gray-700 shrink-0" alt="${p.name}">
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="font-bold text-white text-base truncate leading-tight">${p.name}</h3>
+                <span class="text-xs text-gray-500 font-mono shrink-0">#${displayId}</span>
               </div>
+              <p class="text-xs text-gray-400 capitalize mt-0.5">${p.category || 'General'} ${p.subCategory ? '· ' + p.subCategory : ''}</p>
+              <div class="mt-1.5 flex items-baseline gap-2 flex-wrap">
+                <span class="text-base font-bold text-white">$${Number(p.priceRegular || 0).toLocaleString("es-CO")}</span>
+                ${p.isOffer ? `<span class="text-xs text-neon font-extrabold bg-neon/10 border border-neon/30 px-2 py-0.5 rounded-full">OFERTA: $${Number(p.priceOffer || 0).toLocaleString("es-CO")}</span>` : ""}
+              </div>
+              ${(p.badge || p.tag) ? `<div class="mt-1.5"><span class="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${String(p.badge || p.tag).toLowerCase().includes('agotan') ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40' : 'bg-slate-900 text-yellow-300 border border-yellow-500/40'}">${p.badge || p.tag}</span></div>` : ''}
             </div>
-          </td>
-          <td class="p-4">
-            $${Number(p.priceRegular || 0).toLocaleString("es-CO")}
-            ${p.isOffer ? `<br><span class="text-xs text-neon font-bold">OFERTA: $${Number(p.priceOffer || 0).toLocaleString("es-CO")}</span>` : ""}
-          </td>
-          <td class="p-4 text-gray-300 text-sm">${p.category || 'General'}</td>
-          <td class="p-4">
-            <div class="flex items-center gap-2">
+          </div>
+
+          <div class="flex items-center justify-between bg-dark/60 p-3 rounded-xl border border-gray-800/80 w-full">
+            <div class="flex items-center gap-3">
               <label class="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" onchange="toggleProductStatus('${safeId}')" class="sr-only peer" ${isAvailable ? "checked" : ""}>
-                <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-neon"></div>
+                <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-neon"></div>
               </label>
-              <span class="text-xs">${statusText}</span>
+              <span class="text-xs font-semibold text-gray-300">Disponibilidad</span>
             </div>
-          </td>
-          <td class="p-4 text-right space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button type="button" data-action="edit" data-id="${safeId}" class="text-blue-400 hover:text-blue-300 text-sm font-medium">Editar</button>
+            <div>${statusText}</div>
+          </div>
+
+          ${variantsHtml}
+
+          <div class="flex items-center gap-2 pt-1 border-t border-gray-800/80 w-full">
+            <button type="button" data-action="edit" data-id="${safeId}" class="flex-1 py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-blue-400 font-bold rounded-xl text-xs sm:text-sm text-center transition-colors cursor-pointer flex items-center justify-center gap-1.5">
+              <span>✏️</span> Editar
+            </button>
             ${
               (typeof getCurrentSession === "function" && getCurrentSession()?.role === "admin")
-                ? `<button type="button" id="del-btn-${safeId}" onclick="confirmDelete('${safeId}')" class="text-red-500 hover:text-red-400 text-sm font-medium">Eliminar</button>`
-                : `<span class="text-xs text-gray-600 cursor-not-allowed">Bloqueado</span>`
+                ? `<button type="button" id="del-btn-${safeId}" onclick="confirmDelete('${safeId}')" class="flex-1 py-2.5 px-4 bg-slate-800 hover:bg-red-950/40 text-red-400 font-bold rounded-xl text-xs sm:text-sm text-center transition-colors cursor-pointer flex items-center justify-center gap-1.5">
+                    <span>🗑️</span> Eliminar
+                  </button>`
+                : `<span class="flex-1 py-2.5 px-4 bg-slate-900 text-gray-600 font-medium rounded-xl text-xs text-center cursor-not-allowed">Bloqueado</span>`
             }
-          </td>
-        </tr>
+          </div>
+        </div>
       `;
     })
     .join("");
@@ -989,7 +1053,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // Acción de Doble Confirmación para Eliminar
-window.confirmDelete = function (id) {
+window.confirmDelete = async function (id) {
   const btn = document.getElementById(`del-btn-${id}`);
   if (btn.innerText === "Eliminar") {
     btn.innerText = "¿Seguro?";
@@ -1003,9 +1067,22 @@ window.confirmDelete = function (id) {
   } else {
     // Eliminar definitivamente
     let products = loadProducts();
-    products = products.filter((p) => p.id !== id);
+    products = products.filter((p) => String(p.id) !== String(id));
+    // Mantener localStorage únicamente como respaldo offline
     saveProducts(products);
     renderInventoryTable();
+
+    // Sincronización directa con Supabase (eliminación)
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('productos').delete().eq('id', id);
+        if (error) {
+          console.error("Error al eliminar producto en Supabase:", error);
+        }
+      } catch (err) {
+        console.error("Fallo de conexión al eliminar en Supabase:", err);
+      }
+    }
   }
 };
 
@@ -1071,6 +1148,9 @@ function initRestockModal() {
       target.status = "activo";
       target.isAvailable = true;
       saveProducts(products);
+      if (supabase) {
+        supabase.from('productos').upsert(target).catch((err) => console.error("Error en Supabase:", err));
+      }
     }
 
     modal.classList.add("hidden");
@@ -1096,6 +1176,9 @@ function openRestockModal(target) {
       const idx = products.findIndex((p) => p.id === target.id);
       if (idx > -1) products[idx] = target;
       saveProducts(products);
+      if (supabase) {
+        supabase.from('productos').upsert(target).catch((err) => console.error("Error en Supabase:", err));
+      }
     }
     renderInventoryTable();
     return;
@@ -1121,9 +1204,9 @@ function openRestockModal(target) {
   qtyInput?.focus();
 }
 
-window.toggleProductStatus = function(id) {
+window.toggleProductStatus = async function(id) {
   let products = loadProducts();
-  const index = products.findIndex(p => p.id === id);
+  const index = products.findIndex(p => String(p.id) === String(id));
   if (index === -1) return;
 
   const target = products[index];
@@ -1143,8 +1226,20 @@ window.toggleProductStatus = function(id) {
         sizeObj.stock = 0;
       });
     });
+    // Guardar en localStorage como respaldo offline
     saveProducts(products);
     renderInventoryTable();
+
+    // Sincronización directa con Supabase
+    if (supabase) {
+      try {
+        const { error } = await supabase.from('productos').upsert(target);
+        if (error) console.error("Error al actualizar disponibilidad en Supabase:", error);
+      } catch (err) {
+        console.error("Fallo de conexión al actualizar en Supabase:", err);
+      }
+    }
+
     if (typeof recordAuditEvent === "function") {
       recordAuditEvent(`Prenda marcada como AGOTADA: "${target.name}"`);
     }
@@ -1514,27 +1609,35 @@ function renderVariantsList() {
 
   if (tempVariants.length === 0) {
     list.innerHTML = `
-      <p class="text-gray-500 text-sm text-center py-2" id="empty-variants-msg">
+      <p class="text-gray-500 text-sm text-center py-3 bg-dark/40 rounded-xl border border-gray-800/60" id="empty-variants-msg">
         No hay variantes asignadas. Agrega al menos una.
       </p>
     `;
     return;
   }
 
-  let html = `<div class="flex flex-wrap gap-2 p-1">`;
+  let html = `<div class="flex flex-col gap-2 w-full">`;
   tempVariants.forEach((v, idx) => {
     html += `
-      <div class="inline-flex items-center gap-2 bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold text-white shadow-sm hover:border-emerald-500/50 transition-all">
-        ${v.color && v.color !== "Único" ? `<span class="text-gray-400 font-normal">${v.color} ·</span>` : ""}
-        <span>Talla: <strong class="text-emerald-400 font-bold">${v.size}</strong></span>
-        <span class="text-slate-600">|</span>
-        <span>Stock: <strong class="text-white font-bold">${v.stock}</strong></span>
-        <button
-          type="button"
-          onclick="removeTempVariant(${idx})"
-          class="text-red-400 hover:text-white hover:bg-red-600/80 rounded-full w-4 h-4 flex items-center justify-center font-bold text-xs ml-1 transition-colors cursor-pointer"
-          title="Remover variante"
-        >✕</button>
+      <div class="flex items-center justify-between bg-slate-900 border border-slate-700 p-3 rounded-xl text-xs font-semibold text-white shadow-sm hover:border-emerald-500/50 transition-all w-full">
+        <div class="flex items-center gap-2.5">
+          <span class="w-3 h-3 rounded-full shrink-0" style="background-color: ${v.colorHex || '#10b981'}"></span>
+          <div>
+            <span class="text-white font-bold text-sm">Talla ${v.size}</span>
+            <span class="text-gray-400 font-normal ml-1.5">(${v.color && v.color !== "Único" ? v.color : "Color único"})</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2.5">
+          <span class="bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-emerald-400 font-mono font-bold">${v.stock} unds</span>
+          <button
+            type="button"
+            onclick="removeTempVariant(${idx})"
+            class="text-red-400 hover:text-white hover:bg-red-600/80 rounded-lg p-2 transition-colors cursor-pointer flex items-center justify-center text-sm font-bold"
+            title="Remover variante"
+          >
+            ✕
+          </button>
+        </div>
       </div>
     `;
   });
@@ -1683,7 +1786,7 @@ window.editProduct = function (id) {
 };
 
 // Procesamiento atómico del formulario: Actualizar vs Crear producto
-form.addEventListener("submit", (e) => {
+form.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   syncCurrentVariantsFromTemp();
@@ -1790,8 +1893,20 @@ form.addEventListener("submit", (e) => {
     products.push(productData);
   }
 
-  // Guardar en localStorage
+  // Guardar en localStorage únicamente como respaldo offline
   saveProducts(products);
+
+  // Sincronización directa con la tabla 'productos' de Supabase (inserción y actualización)
+  if (supabase) {
+    try {
+      const { error } = await supabase.from('productos').upsert(productData);
+      if (error) {
+        console.error("Error al sincronizar prenda con Supabase:", error);
+      }
+    } catch (err) {
+      console.error("Fallo de conexión al sincronizar con Supabase:", err);
+    }
+  }
 
   // Limpiar estrictamente el estado y el formulario
   editingId = null;
@@ -1813,7 +1928,19 @@ form.addEventListener("submit", (e) => {
   }
 });
 
-
+// Sincronización centralizada inicial desde la tabla 'productos' de Supabase
+async function fetchProductsFromSupabase() {
+  if (!supabase) return;
+  try {
+    const { data, error } = await supabase.from('productos').select('*');
+    if (!error && Array.isArray(data) && data.length > 0) {
+      saveProducts(data);
+      renderInventoryTable();
+    }
+  } catch (err) {
+    console.warn("No se pudo obtener productos desde Supabase:", err);
+  }
+}
 
 // ==========================================
 // INICIALIZACIÓN GENERAL
@@ -1822,6 +1949,7 @@ function initDashboard() {
   initializeMockSales();
   renderAnalytics("day"); // Cargar por defecto vista del día
   renderInventoryTable();
+  fetchProductsFromSupabase();
 }
 
 // 9. Sistema Integral de Copia de Respaldo (Backup & Restore)

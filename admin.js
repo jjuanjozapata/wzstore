@@ -27,60 +27,12 @@ const sanitizeInput = (str) => {
 };
 
 // Constantes del motor de autenticación multiusuario
+// Constantes del motor de autenticación
 const USERS_STORAGE_KEY = "wz_auth_users";
 const SESSION_KEY = "wz_admin_session";
-const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutos de inactividad
 
-// Variable global en memoria para Safari en iPhone y persistencia de sesión
-window.wzAuth = window.wzAuth || false;
-try {
-  if (sessionStorage.getItem('wz_logged') === 'true' || localStorage.getItem('wz_logged') === 'true') {
-    window.wzAuth = true;
-  }
-} catch (e) {}
-
-// Credenciales maestras indestructibles en código
-const MASTER_ADMINS = [
-  { user: 'juan', pass: 'juan1234' },
-  { user: 'admin', pass: 'admin123' },
-  { user: 'wzadmin', pass: 'wz2026' }
-];
-
-// Respaldo de autenticación en memoria para Safari móvil y navegación privada (variable isAuth = true)
-let isAuth = window.wzAuth;
-let inMemorySession = null;
-
-// Lista de credenciales maestras por defecto en el script (multiplataforma / nuevos dispositivos)
-const MASTER_CREDENTIALS = [
-  {
-    username: "admin",
-    password: "admin123",
-    passwordHash: "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
-    role: "admin",
-    createdAt: 1726000000000
-  },
-  {
-    username: "admin",
-    password: "wzstore2026",
-    passwordHash: "4dfc0fcf9c5ae52f9b8823ce9754f9a5d1b702ecffcfc07ef9ad7ad5bf0f946d",
-    role: "admin",
-    createdAt: 1726000000000
-  },
-  {
-    username: "juan",
-    password: "juan1234",
-    passwordHash: "99e289bf65d4911d8d5dfbcabdd0cfc5108d6c70fb9073c6dc20d23fb5f782f2",
-    role: "admin",
-    createdAt: 1726000000000
-  },
-  {
-    username: "monitor",
-    password: "monitor2026",
-    passwordHash: "64d0dc372f88421c60633b4976ea65f3d45e054a7c87c04ff2b7ea08d7457bca",
-    role: "worker",
-    createdAt: 1726000000000
-  }
-];
+// Estado de sesión activo en memoria sincronizado exclusivamente con Supabase
+let currentSession = null;
 
 // Utilidad centralizada de notificaciones Toast no intrusivas
 const showToast = (message, type = "success") => {
@@ -105,9 +57,9 @@ const showToast = (message, type = "success") => {
 const getStoredUsers = () => {
   try {
     const raw = localStorage.getItem(USERS_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : initializeUsersStore();
+    return raw ? JSON.parse(raw) : [];
   } catch {
-    return initializeUsersStore();
+    return [];
   }
 };
 
@@ -119,107 +71,26 @@ const saveStoredUsers = (usersList) => {
   }
 };
 
-// Obtener usuarios combinando credenciales maestras y usuarios en localStorage
-const getCombinedUsers = () => {
-  let stored = [];
-  try {
-    const raw = localStorage.getItem(USERS_STORAGE_KEY);
-    if (raw) {
-      stored = JSON.parse(raw);
-    }
-  } catch (err) {
-    console.warn("Acceso a localStorage restringido:", err);
-  }
-  if (!Array.isArray(stored)) {
-    stored = [];
-  }
-  const list = [...MASTER_CREDENTIALS];
-  stored.forEach((sUser) => {
-    if (sUser && sUser.username) {
-      const idx = list.findIndex((m) => m.username.toLowerCase() === sUser.username.toLowerCase());
-      if (idx >= 0) {
-        list[idx] = { ...list[idx], ...sUser };
-      } else {
-        list.push(sUser);
-      }
-    }
-  });
-  return list;
-};
-
 const getCurrentSession = () => {
-  const now = Date.now();
-  if ((isAuth || window.wzAuth) && inMemorySession && (now - (inMemorySession.timestamp || 0) <= SESSION_TIMEOUT)) {
-    return inMemorySession;
-  }
-  try {
-    let raw = sessionStorage.getItem(SESSION_KEY);
-    if (!raw) {
-      raw = localStorage.getItem(SESSION_KEY);
-    }
-    if (raw) {
-      const data = JSON.parse(raw);
-      if (data && (now - (data.timestamp || 0) <= SESSION_TIMEOUT)) {
-        inMemorySession = data;
-        isAuth = true;
-        window.wzAuth = true;
-        return inMemorySession;
-      }
-    }
-    if (sessionStorage.getItem('wz_logged') === 'true' || localStorage.getItem('wz_logged') === 'true') {
-      window.wzAuth = true;
-      isAuth = true;
-      if (!inMemorySession) {
-        inMemorySession = {
-          username: "juan",
-          role: "admin",
-          timestamp: now
-        };
-      }
-      return inMemorySession;
-    }
-  } catch {
-    // Safari incógnito o acceso restringido a sessionStorage
-  }
-  if ((isAuth || window.wzAuth) && inMemorySession) {
-    return inMemorySession;
-  }
-  if (isAuth || window.wzAuth) {
-    inMemorySession = {
-      username: "juan",
-      role: "admin",
-      timestamp: now
-    };
-    return inMemorySession;
-  }
-  return null;
+  if (!currentSession) return null;
+  return {
+    username: currentSession.user?.email || "admin",
+    email: currentSession.user?.email || "",
+    role: currentSession.user?.user_metadata?.role || "admin",
+  };
 };
 
 const setSession = (sessionData) => {
-  inMemorySession = sessionData;
-  isAuth = true;
-  window.wzAuth = true;
-  try {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
-    sessionStorage.setItem('wz_logged', 'true');
-    localStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
-    localStorage.setItem('wz_logged', 'true');
-  } catch {
-    // Si Safari bloquea sessionStorage, window.wzAuth e inMemorySession mantienen la sesión activa
-  }
+  currentSession = sessionData;
 };
 
 const clearSession = () => {
-  inMemorySession = null;
-  isAuth = false;
-  window.wzAuth = false;
+  currentSession = null;
   try {
     sessionStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem('wz_logged');
     localStorage.removeItem(SESSION_KEY);
-    localStorage.removeItem('wz_logged');
   } catch {
-    // Ignorar si sessionStorage no está accesible
+    // Ignorar si el almacenamiento no está accesible
   }
 };
 
@@ -262,63 +133,48 @@ const applyRolePermissions = () => {
   renderInventoryTable();
 };
 
-// Verificación y mantenimiento del estado de sesión
-// Control de sesión activa de 30 min sobre el contenedor #wz-login-overlay
-function checkAuth() {
-  const isLogged = window.wzAuth === true || (() => {
-    try {
-      return sessionStorage.getItem('wz_logged') === 'true' || localStorage.getItem('wz_logged') === 'true';
-    } catch(e) {
-      return false;
-    }
-  })();
+// Verificación y sincronización de sesión mediante Supabase Auth
+let authListenerInitialized = false;
 
-  const sessionData = getCurrentSession();
-  const now = Date.now();
+async function checkAuth() {
   const overlay = document.getElementById("wz-login-overlay") || document.getElementById("login-modal");
   const dashboard = document.getElementById("admin-dashboard");
 
-  if (!isLogged && (!sessionData || (sessionData.timestamp && now - sessionData.timestamp > SESSION_TIMEOUT))) {
-    clearSession();
+  if (!supabase) {
+    if (overlay) overlay.classList.remove("hidden");
+    if (dashboard) dashboard.classList.add("hidden");
+    return;
+  }
+
+  if (!authListenerInitialized) {
+    authListenerInitialized = true;
+    supabase.auth.onAuthStateChange((event, session) => {
+      currentSession = session;
+      if (!session) {
+        if (overlay) overlay.classList.remove("hidden");
+        if (dashboard) dashboard.classList.add("hidden");
+      } else {
+        if (overlay) overlay.classList.add("hidden");
+        if (dashboard) dashboard.classList.remove("hidden");
+        initDashboard();
+        if (typeof applyRolePermissions === "function") applyRolePermissions();
+      }
+    });
+  }
+
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session) {
+    currentSession = null;
     if (overlay) overlay.classList.remove("hidden");
     if (dashboard) dashboard.classList.add("hidden");
   } else {
-    // Mantener sesión activa tanto en memoria como en sessionStorage y localStorage
-    window.wzAuth = true;
-    try {
-      sessionStorage.setItem('wz_logged', 'true');
-      localStorage.setItem('wz_logged', 'true');
-    } catch(e) {}
-    if (sessionData) {
-      sessionData.timestamp = now;
-      setSession(sessionData);
-    } else {
-      setSession({
-        username: "juan",
-        role: "admin",
-        timestamp: now
-      });
-    }
+    currentSession = session;
     if (overlay) overlay.classList.add("hidden");
     if (dashboard) dashboard.classList.remove("hidden");
     initDashboard();
-    applyRolePermissions();
+    if (typeof applyRolePermissions === "function") applyRolePermissions();
   }
 }
-
-// Función auxiliar de hashing criptográfico unidireccional SHA-256 (tolerante a Safari/HTTP)
-const sha256Hex = async (plainText) => {
-  try {
-    if (window.crypto && window.crypto.subtle && typeof window.crypto.subtle.digest === "function") {
-      const encoder = new TextEncoder();
-      const data = encoder.encode(plainText);
-      const hashBuffer = await window.crypto.subtle.digest("SHA-256", data);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-    }
-  } catch (err) {}
-  return "";
-};
 
 // 10. Actualización Masiva de Precios por Categoría
 window.applyBulkPriceAdjustment = (targetCategory, percentageChange) => {
@@ -356,58 +212,9 @@ window.applyBulkPriceAdjustment = (targetCategory, percentageChange) => {
 };
 
 // Siembra de usuarios incorporando la cuenta administrativa canónica admin / wzstore2026 y admin123
-const initializeUsersStore = () => {
-  let storedUsers = null;
-  try {
-    storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
-  } catch (err) {}
+const initializeUsersStore = () => [];
 
-  const canonicalAccounts = [
-    { username: "admin", password: "admin123", passwordHash: "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9", role: "admin", createdAt: 1726000000000 },
-    { username: "admin", password: "wzstore2026", passwordHash: "4dfc0fcf9c5ae52f9b8823ce9754f9a5d1b702ecffcfc07ef9ad7ad5bf0f946d", role: "admin", createdAt: 1726000000000 },
-    { username: "juan", password: "juan1234", passwordHash: "99e289bf65d4911d8d5dfbcabdd0cfc5108d6c70fb9073c6dc20d23fb5f782f2", role: "admin", createdAt: 1726000000000 },
-    { username: "monitor", password: "monitor2026", passwordHash: "64d0dc372f88421c60633b4976ea65f3d45e054a7c87c04ff2b7ea08d7457bca", role: "worker", createdAt: 1726000000000 }
-  ];
-
-  if (!storedUsers) {
-    try {
-      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(canonicalAccounts));
-    } catch (err) {}
-    return canonicalAccounts;
-  }
-
-  try {
-    let parsed = JSON.parse(storedUsers);
-    // Sanitizar cuentas preexistentes: migrar cualquier texto plano a SHA-256
-    let modified = false;
-    parsed = parsed.map((u) => {
-      if (u.password && !u.passwordHash) {
-        modified = true;
-        return { username: u.username, password: u.password, passwordHash: "4dfc0fcf9c5ae52f9b8823ce9754f9a5d1b702ecffcfc07ef9ad7ad5bf0f946d", role: u.role, createdAt: u.createdAt || Date.now() };
-      }
-      return u;
-    });
-
-    if (!parsed.some((u) => u.username.toLowerCase() === "admin")) {
-      parsed.push(canonicalAccounts[0]);
-      modified = true;
-    }
-
-    if (modified) {
-      try {
-        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(parsed));
-      } catch (err) {}
-    }
-    return parsed;
-  } catch (err) {
-    try {
-      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(canonicalAccounts));
-    } catch (e) {}
-    return canonicalAccounts;
-  }
-};
-
-// Manejo del formulario de Login con credencial maestra y usuarios locales
+// Manejo del formulario de Login exclusivamente mediante Supabase Auth
 const loginForm = document.getElementById("login-form");
 if (loginForm) {
   loginForm.addEventListener("submit", async (event) => {
@@ -420,10 +227,8 @@ if (loginForm) {
     const passwordEl = document.getElementById("password");
     const errorEl = document.getElementById("login-error");
 
-    // Limpia espacios accidentales con .trim().toLowerCase() en el usuario y .trim() en la clave
     const u = usernameEl ? usernameEl.value.trim().toLowerCase() : "";
     const p = passwordEl ? passwordEl.value.trim() : "";
-    const pLower = passwordEl ? passwordEl.value.trim().toLowerCase() : "";
 
     if (!u || !p) {
       if (errorEl) {
@@ -434,103 +239,50 @@ if (loginForm) {
       return;
     }
 
+    if (!supabase) {
+      if (errorEl) {
+        errorEl.textContent = "Error de conexión con el servicio de autenticación.";
+        errorEl.classList.remove("hidden");
+        errorEl.style.display = "block";
+      }
+      return;
+    }
+
     try {
-      // 1. Validar de forma prioritaria si las credenciales coinciden con MASTER_ADMINS
-      const masterFound = MASTER_ADMINS.find((m) => {
-        const mUser = (m.user || "").trim().toLowerCase();
-        const mPass = (m.pass || "").trim();
-        return mUser === u && (mPass === p || mPass.toLowerCase() === pLower);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: u,
+        password: p,
       });
 
-      let isMatch = !!masterFound;
-      let matchedRole = "admin";
-      let matchedName = masterFound ? masterFound.user : u;
-
-      // 2. Validar si las credenciales coinciden con usuarios de localStorage
-      if (!isMatch) {
-        let localUsers = [];
-        try {
-          const raw = localStorage.getItem(USERS_STORAGE_KEY);
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) localUsers = parsed;
-          }
-        } catch (e) {}
-
-        let incomingHash = "";
-        let incomingHashRaw = "";
-        try {
-          incomingHash = await sha256Hex(pLower);
-          incomingHashRaw = await sha256Hex(p);
-        } catch (e) {}
-
-        const localFound = localUsers.find((usr) => {
-          const usrName = (usr.username || usr.user || "").trim().toLowerCase();
-          if (usrName !== u) return false;
-
-          const usrPass = (usr.password || usr.pass || "").trim().toLowerCase();
-          const usrPassRaw = (usr.password || usr.pass || "").trim();
-
-          if (usrPass && (usrPass === p || usrPassRaw === p || usrPass === pLower)) return true;
-          if (usr.passwordHash && (
-            (incomingHash && usr.passwordHash === incomingHash) ||
-            (incomingHashRaw && usr.passwordHash === incomingHashRaw)
-          )) return true;
-
-          return false;
-        });
-
-        if (localFound) {
-          isMatch = true;
-          matchedRole = localFound.role || "admin";
-          matchedName = localFound.username || localFound.user || u;
-        }
-      }
-
-      // Si coincide con cualquiera de los dos, concede acceso inmediato y persiste sin rebotes
-      if (isMatch) {
-        try {
-          localStorage.removeItem("wz_admin_lockout");
-        } catch (err) {}
-
-        // Guarda la sesión en memoria, sessionStorage y localStorage para evitar rebotes
-        window.wzAuth = true;
-        try {
-          sessionStorage.setItem("wz_logged", "true");
-          localStorage.setItem("wz_logged", "true");
-        } catch (err) {}
-
-        setSession({
-          username: matchedName,
-          role: matchedRole,
-          timestamp: Date.now()
-        });
-
+      if (error || !data?.session) {
         if (errorEl) {
-          errorEl.classList.add("hidden");
-          errorEl.style.display = "none";
-        }
-        if (usernameEl) usernameEl.value = "";
-        if (passwordEl) passwordEl.value = "";
-
-        const overlay = document.getElementById("wz-login-overlay") || document.getElementById("login-modal");
-        const dashboard = document.getElementById("admin-dashboard");
-        if (overlay) overlay.classList.add("hidden");
-        if (dashboard) dashboard.classList.remove("hidden");
-
-        checkAuth();
-      } else {
-        // Si la clave falla, muestra un mensaje visible en texto rojo dentro del modal en lugar de quedarse congelado sin hacer nada
-        if (errorEl) {
-          errorEl.textContent = "Credenciales inválidas. Verifica tu usuario y contraseña.";
+          errorEl.textContent = "Credenciales inválidas. Verifica tu correo corporativo y contraseña.";
           errorEl.classList.remove("hidden");
           errorEl.style.display = "block";
         }
+        return;
       }
+
+      currentSession = data.session;
+
+      if (errorEl) {
+        errorEl.classList.add("hidden");
+        errorEl.style.display = "none";
+      }
+      if (usernameEl) usernameEl.value = "";
+      if (passwordEl) passwordEl.value = "";
+
+      const overlay = document.getElementById("wz-login-overlay") || document.getElementById("login-modal");
+      const dashboard = document.getElementById("admin-dashboard");
+      if (overlay) overlay.classList.add("hidden");
+      if (dashboard) dashboard.classList.remove("hidden");
+
+      initDashboard();
+      if (typeof applyRolePermissions === "function") applyRolePermissions();
     } catch (err) {
       console.error("Error en validación de credenciales:", err);
       if (errorEl) {
-        errorEl.textContent = "Credenciales inválidas. Inténtalo de nuevo.";
+        errorEl.textContent = "Error al autenticar. Inténtalo de nuevo.";
         errorEl.classList.remove("hidden");
         errorEl.style.display = "block";
       }
@@ -692,8 +444,15 @@ if (createUserForm) {
 // Evento de Logout
 const logoutBtn = document.getElementById("logout-btn");
 if (logoutBtn) {
-  logoutBtn.addEventListener("click", (e) => {
+  logoutBtn.addEventListener("click", async (e) => {
     if (e) e.preventDefault();
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.error("Error al cerrar sesión en Supabase:", err);
+      }
+    }
     clearSession();
     window.location.href = "index.html"; // Lo sacamos a la tienda principal
   });

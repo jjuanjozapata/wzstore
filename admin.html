@@ -7,7 +7,7 @@
     <!-- Directiva Content Security Policy reforzada para consola administrativa -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com; media-src 'self' data: blob:; connect-src 'self';"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com https://*.supabase.co; media-src 'self' data: blob:; connect-src 'self' https://*.supabase.co;"
     />
     <title>WZSTORE | Back-Office Administrativo</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -69,14 +69,14 @@
         <form id="login-form" class="space-y-4" method="POST" action="javascript:void(0);" onsubmit="event.preventDefault();">
           <div>
             <input
-              type="text"
+              type="email"
               id="username"
               autocomplete="off"
               autocapitalize="none"
               autocorrect="off"
               spellcheck="false"
-              placeholder="Usuario"
-              class="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-neon transition-colors"
+              placeholder="Correo corporativo"
+              class="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-neon transition-colors text-base sm:text-sm"
               style="touch-action: manipulation;"
               required
             />
@@ -90,7 +90,7 @@
               autocorrect="off"
               spellcheck="false"
               placeholder="Contraseña"
-              class="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-neon transition-colors"
+              class="w-full bg-dark border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-neon transition-colors text-base sm:text-sm"
               style="touch-action: manipulation;"
               required
             />
@@ -191,7 +191,7 @@
               <input
                 type="password"
                 id="wz-pwd-current"
-                class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:border-neon outline-none"
+                class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2.5 text-base sm:text-sm text-white focus:border-neon outline-none"
                 required
               />
             </div>
@@ -200,7 +200,7 @@
               <input
                 type="password"
                 id="wz-pwd-new"
-                class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:border-neon outline-none"
+                class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2.5 text-base sm:text-sm text-white focus:border-neon outline-none"
                 minlength="6"
                 required
               />
@@ -210,7 +210,7 @@
               <input
                 type="password"
                 id="wz-pwd-confirm"
-                class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:border-neon outline-none"
+                class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2.5 text-base sm:text-sm text-white focus:border-neon outline-none"
                 minlength="6"
                 required
               />
@@ -255,7 +255,7 @@
                   type="text"
                   id="wz-new-username"
                   placeholder="ej: monitor1"
-                  class="w-full bg-card border border-gray-700 rounded-lg px-3 py-2 text-xs text-white focus:border-neon outline-none"
+                  class="w-full bg-card border border-gray-700 rounded-lg px-3 py-2 text-base sm:text-sm text-white focus:border-neon outline-none"
                   required
                 />
               </div>
@@ -265,7 +265,7 @@
                   type="password"
                   id="wz-new-password"
                   placeholder="Mínimo 6 caract."
-                  class="w-full bg-card border border-gray-700 rounded-lg px-3 py-2 text-xs text-white focus:border-neon outline-none"
+                  class="w-full bg-card border border-gray-700 rounded-lg px-3 py-2 text-base sm:text-sm text-white focus:border-neon outline-none"
                   minlength="6"
                   required
                 />
@@ -274,7 +274,7 @@
                 <label class="block text-xs text-gray-400 mb-1">Rol Asignado *</label>
                 <select
                   id="wz-new-role"
-                  class="w-full bg-card border border-gray-700 rounded-lg px-3 py-2 text-xs text-white focus:border-neon outline-none cursor-pointer"
+                  class="w-full bg-card border border-gray-700 rounded-lg px-3 py-2 text-base sm:text-sm text-white focus:border-neon outline-none cursor-pointer"
                 >
                   <option value="worker">Trabajador / Monitor</option>
                   <option value="admin">Administrador Total</option>
@@ -426,7 +426,7 @@
                 <input
                   type="text"
                   id="prod-name"
-                  class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2.5 text-white focus:border-neon outline-none text-sm"
+                  class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2.5 text-white focus:border-neon outline-none text-base sm:text-sm"
                   required
                 />
               </div>
@@ -438,7 +438,7 @@
                   </label>
                   <select
                     id="prod-category"
-                    class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2.5 text-xs text-white focus:border-neon outline-none cursor-pointer"
+                    class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2.5 text-base sm:text-sm text-white focus:border-neon outline-none cursor-pointer"
                     required
                   >
                     <option value="hombre">Ropa Hombre</option>
@@ -452,7 +452,7 @@
                   </label>
                   <select
                     id="prod-subcategory"
-                    class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2.5 text-xs text-white focus:border-neon outline-none cursor-pointer"
+                    class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2.5 text-base sm:text-sm text-white focus:border-neon outline-none cursor-pointer"
                     required
                   >
                     <!-- Opciones pobladas reactivamente por JS -->
@@ -512,7 +512,7 @@
                 <textarea
                   id="prod-desc"
                   rows="3"
-                  class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2 text-white focus:border-neon outline-none resize-none text-sm"
+                  class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2 text-white focus:border-neon outline-none resize-none text-base sm:text-sm"
                   required
                 ></textarea>
               </div>
@@ -530,7 +530,7 @@
                   type="number"
                   id="prod-price"
                   min="0"
-                  class="w-full bg-card border border-gray-700 rounded-xl px-3 py-2.5 text-white focus:border-neon outline-none text-sm"
+                  class="w-full bg-card border border-gray-700 rounded-xl px-3 py-2.5 text-white focus:border-neon outline-none text-base sm:text-sm"
                   required
                 />
               </div>
@@ -607,7 +607,7 @@
                 </p>
                 <select
                   id="prod-badge"
-                  class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2 text-xs text-white focus:border-neon outline-none cursor-pointer"
+                  class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2 text-base sm:text-sm text-white focus:border-neon outline-none cursor-pointer"
                 >
                   <option value="">Sin etiqueta / Normal</option>
                   <option value="Agotándose rápido">Agotándose rápido</option>
@@ -631,7 +631,7 @@
                   type="text"
                   id="var-color"
                   placeholder="Ej: Negro"
-                  class="w-full bg-card border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-neon outline-none"
+                  class="w-full bg-card border border-gray-700 rounded-lg px-3 py-2 text-base sm:text-sm text-white focus:border-neon outline-none"
                 />
               </div>
               <div class="w-full">
@@ -640,7 +640,7 @@
                   type="text"
                   id="var-size"
                   placeholder="S, M, 42..."
-                  class="w-full bg-card border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-neon outline-none uppercase"
+                  class="w-full bg-card border border-gray-700 rounded-lg px-3 py-2 text-base sm:text-sm text-white focus:border-neon outline-none uppercase"
                 />
               </div>
               <div class="w-full">
@@ -650,7 +650,7 @@
                   id="var-stock"
                   min="0"
                   placeholder="Cant."
-                  class="w-full bg-card border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:border-neon outline-none"
+                  class="w-full bg-card border border-gray-700 rounded-lg px-3 py-2 text-base sm:text-sm text-white focus:border-neon outline-none"
                 />
               </div>
               <div class="w-full">
@@ -736,7 +736,7 @@
           min="1" 
           step="1" 
           placeholder="Ej: 10" 
-          class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+          class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-base sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
         >
         <span id="wz-modal-error-msg" class="text-xs text-red-400 hidden font-medium">Debes ingresar un número entero mayor o igual a 1.</span>
       </div>

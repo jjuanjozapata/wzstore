@@ -1174,6 +1174,8 @@ window.addToCart = (productId) => {
     });
   }
 
+  if (navigator.vibrate) navigator.vibrate(15);
+
   saveCart();
   updateCartUI();
   openDrawer();
@@ -1256,7 +1258,8 @@ const updateCartUI = () => {
     // Sobrescribir precio manipulado en el objeto con el precio del catálogo
     item.price = verifiedUnitPrice;
 
-    const safeQty = Math.max(1, parseInt(item.qty, 10) || 1);
+    const safeQty = Math.max(1, Math.floor(Number(item.qty) || 1));
+    item.qty = safeQty;
     totalItems += safeQty;
     subtotal += verifiedUnitPrice * safeQty;
 
@@ -1488,30 +1491,29 @@ const processCheckout = () => {
     return;
   }
 
-  // Búsqueda tolerante en almacenamiento unificado y memoria de productos
-  let canonProducts = [];
-  try {
-    const rawStored = localStorage.getItem("wz_core_products") || localStorage.getItem("wz_products");
-    canonProducts = rawStored ? JSON.parse(rawStored) : (products || []);
-  } catch (err) {
-    canonProducts = products || [];
-  }
-
+  // Validación de montos exclusivamente contra la colección canónica 'products' obtenida de Supabase
   let verifiedSubtotal = 0;
   let totalRegularCanon = 0;
   let verifiedCartDetails = [];
 
   for (const item of cart) {
-    const original = canonProducts.find((p) => String(p.id) === String(item.id)) || products.find((p) => String(p.id) === String(item.id));
+    const original = Array.isArray(products) ? products.find((p) => String(p.id) === String(item.id)) : null;
     if (!original) {
       showNotificationModal("Catálogo Desactualizado", "Uno de los productos ya no se encuentra en el inventario.");
       return;
     }
 
-    // Precio oficial fijado desde la base canónica
-    const authenticPrice = original.isOffer ? original.priceOffer : original.priceRegular;
-    const authenticRegularPrice = original.priceRegular || authenticPrice;
+    // Validación canónica de precio en memoria
+    const rawPrice = original.isOffer ? original.priceOffer : original.priceRegular;
+    const authenticPrice = Number(rawPrice);
+    if (isNaN(authenticPrice) || authenticPrice <= 0) {
+      showNotificationModal("Precio Inválido", "Uno de los productos no cuenta con un precio válido en el inventario.");
+      return;
+    }
+
+    const authenticRegularPrice = Number(original.priceRegular) > 0 ? Number(original.priceRegular) : authenticPrice;
     const safeQty = Math.max(1, Math.floor(Number(item.qty) || 1));
+    item.qty = safeQty;
 
     verifiedSubtotal += authenticPrice * safeQty;
     totalRegularCanon += authenticRegularPrice * safeQty;
@@ -1553,7 +1555,8 @@ const processCheckout = () => {
   msg += `*Prendas Solicitadas:*\n`;
 
   verifiedCartDetails.forEach((item) => {
-    msg += `▪ ${item.name}\n   Color: ${item.color} | Talla: ${item.size} | Cant: ${item.qty} | Sub: $${item.subtotal.toLocaleString("es-CO")}\n`;
+    const itemQty = Math.max(1, Math.floor(Number(item.qty) || 1));
+    msg += `▪ ${item.name}\n   Color: ${item.color} | Talla: ${item.size} | Cant: ${itemQty} | Sub: $${item.subtotal.toLocaleString("es-CO")}\n`;
   });
 
   // Cálculo del ahorro total del cliente y aplicación de la línea psicológica obligatoria

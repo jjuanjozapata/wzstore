@@ -18,7 +18,7 @@
     <!-- Content Security Policy (CSP) Endurecido Enterprise -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://images.unsplash.com https://jjuanjozapata.github.io; media-src 'self' data: blob:; connect-src 'self' https://wa.me https://api.whatsapp.com https://web.whatsapp.com; frame-ancestors 'none'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://wa.me https://api.whatsapp.com;"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://images.unsplash.com https://jjuanjozapata.github.io https://*.supabase.co; media-src 'self' data: blob:; connect-src 'self' https://wa.me https://api.whatsapp.com https://web.whatsapp.com https://*.supabase.co; frame-ancestors 'none'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://wa.me https://api.whatsapp.com;"
     />
     <!-- Título estricto para snippet de Google SERP sin sufijos adicionales -->
     <title>WZSTORE</title>
@@ -202,7 +202,7 @@
             type="text"
             id="search-input"
             placeholder="Buscar equipamiento..."
-            class="bg-[#111726] border border-[#1e293b] rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-green-500 transition-colors hidden sm:block"
+            class="bg-[#111726] border border-[#1e293b] rounded-lg px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-green-500 transition-colors hidden sm:block"
           />
 
           <button
@@ -410,8 +410,8 @@
     <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl mb-6 max-w-xl mx-auto text-center">
       <h4 class="text-xs font-bold uppercase tracking-widest text-emerald-400 mb-2">Calculadora de Talla Óptima</h4>
       <div class="flex gap-2 justify-center items-center">
-        <input type="number" id="wz-calc-height" placeholder="Estatura (cm)" class="w-32 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white text-center focus:border-emerald-500 outline-none">
-        <input type="number" id="wz-calc-weight" placeholder="Peso (kg)" class="w-32 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white text-center focus:border-emerald-500 outline-none">
+        <input type="number" id="wz-calc-height" placeholder="Estatura (cm)" class="w-32 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-base sm:text-sm text-white text-center focus:border-emerald-500 outline-none">
+        <input type="number" id="wz-calc-weight" placeholder="Peso (kg)" class="w-32 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-base sm:text-sm text-white text-center focus:border-emerald-500 outline-none">
         <button data-action="calc-size" onclick="calculateRecommendedSize()" class="bg-emerald-500 text-black font-bold text-xs px-3 py-1 rounded hover:bg-emerald-400 transition-colors">Calcular</button>
       </div>
       <p id="wz-size-result" class="text-xs text-slate-300 mt-2 font-medium hidden"></p>
@@ -619,7 +619,7 @@
             type="text"
             id="coupon-input"
             placeholder="Código Promo"
-            class="w-full bg-[#1e293b] text-white px-3 py-2 rounded text-sm outline-none border border-transparent focus:border-green-500"
+            class="w-full bg-[#1e293b] text-white px-3 py-2 rounded text-base sm:text-sm outline-none border border-transparent focus:border-green-500"
           />
           <button
             id="apply-coupon"
@@ -632,7 +632,7 @@
         <div class="mb-4">
           <select
             id="shipping-select"
-            class="w-full bg-[#1e293b] text-white px-3 py-2 rounded text-sm outline-none cursor-pointer"
+            class="w-full bg-[#1e293b] text-white px-3 py-2 rounded text-base sm:text-sm outline-none cursor-pointer"
           >
             <option value="local">Envío Local (+$5,000)</option>
             <option value="nacional">Envío Nacional (+$20,000)</option>
@@ -719,7 +719,7 @@
               <input
                 type="text"
                 id="chk-firstname"
-                class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-sm outline-none focus:border-emerald-500 border border-slate-700"
+                class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-base sm:text-sm outline-none focus:border-emerald-500 border border-slate-700"
                 placeholder="Ej: Juan José"
                 required
               />
@@ -729,7 +729,7 @@
               <input
                 type="text"
                 id="chk-lastname"
-                class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-sm outline-none focus:border-emerald-500 border border-slate-700"
+                class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-base sm:text-sm outline-none focus:border-emerald-500 border border-slate-700"
                 placeholder="Ej: Zapata"
                 required
               />
@@ -741,7 +741,7 @@
             <input
               type="tel"
               id="chk-phone"
-              class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-sm outline-none focus:border-emerald-500 border border-slate-700"
+              class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-base sm:text-sm outline-none focus:border-emerald-500 border border-slate-700"
               placeholder="Ej: 3001234567"
               required
             />
@@ -753,7 +753,7 @@
               <input
                 type="text"
                 id="chk-city"
-                class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-sm outline-none focus:border-emerald-500 border border-slate-700"
+                class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-base sm:text-sm outline-none focus:border-emerald-500 border border-slate-700"
                 placeholder="Ej: Medellín"
               />
             </div>
@@ -762,7 +762,7 @@
               <input
                 type="text"
                 id="chk-postal"
-                class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-sm outline-none focus:border-emerald-500 border border-slate-700"
+                class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-base sm:text-sm outline-none focus:border-emerald-500 border border-slate-700"
                 placeholder="Obligatorio si no hay ciudad"
               />
             </div>
@@ -773,7 +773,7 @@
             <input
               type="text"
               id="chk-addr"
-              class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-sm outline-none focus:border-emerald-500 border border-slate-700"
+              class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-base sm:text-sm outline-none focus:border-emerald-500 border border-slate-700"
               placeholder="Calle / Carrera / Avenida # ..."
               required
             />
@@ -784,7 +784,7 @@
             <input
               type="text"
               id="chk-extra-addr"
-              class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-sm outline-none focus:border-emerald-500 border border-slate-700"
+              class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-base sm:text-sm outline-none focus:border-emerald-500 border border-slate-700"
               placeholder="Ej: Torre 2 Apto 401"
             />
           </div>
@@ -793,7 +793,7 @@
             <label class="text-xs text-slate-400 font-semibold block mb-1">Método de Pago *</label>
             <select
               id="chk-payment-method"
-              class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-sm outline-none focus:border-emerald-500 border border-slate-700 cursor-pointer"
+              class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-base sm:text-sm outline-none focus:border-emerald-500 border border-slate-700 cursor-pointer"
             >
               <option value="Transferencia Bancaria (Bancolombia / Nequi)">Transferencia Bancaria (Bancolombia / Nequi)</option>
               <option value="Pago Contra Entrega">Pago Contra Entrega (Efectivo al recibir)</option>

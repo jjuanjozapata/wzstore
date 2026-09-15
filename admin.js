@@ -26,6 +26,9 @@ const USERS_STORAGE_KEY = "wz_auth_users";
 const SESSION_KEY = "wz_admin_session";
 const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutos de inactividad
 
+// Respaldo inmediato en memoria para evitar rebotes o cierres inesperados en Safari móvil / incógnito
+let inMemorySession = null;
+
 // Utilidad centralizada de notificaciones Toast no intrusivas
 const showToast = (message, type = "success") => {
   const container = document.getElementById("wz-toast-container");
@@ -46,8 +49,6 @@ const showToast = (message, type = "success") => {
   }, 3500);
 };
 
-
-
 const getStoredUsers = () => {
   return JSON.parse(localStorage.getItem(USERS_STORAGE_KEY)) || initializeUsersStore();
 };
@@ -57,10 +58,40 @@ const saveStoredUsers = (usersList) => {
 };
 
 const getCurrentSession = () => {
+  const now = Date.now();
+  if (inMemorySession && (now - (inMemorySession.timestamp || 0) <= SESSION_TIMEOUT)) {
+    return inMemorySession;
+  }
   try {
-    return JSON.parse(sessionStorage.getItem(SESSION_KEY));
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (raw) {
+      const data = JSON.parse(raw);
+      if (data && (now - (data.timestamp || 0) <= SESSION_TIMEOUT)) {
+        inMemorySession = data;
+        return inMemorySession;
+      }
+    }
   } catch {
-    return null;
+    // Safari incógnito o acceso restringido a sessionStorage
+  }
+  return inMemorySession;
+};
+
+const setSession = (sessionData) => {
+  inMemorySession = sessionData;
+  try {
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
+  } catch {
+    // Si Safari bloquea sessionStorage, inMemorySession mantiene la sesión activa
+  }
+};
+
+const clearSession = () => {
+  inMemorySession = null;
+  try {
+    sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // Ignorar si sessionStorage no está accesible
   }
 };
 
@@ -112,13 +143,13 @@ function checkAuth() {
   const dashboard = document.getElementById("admin-dashboard");
 
   if (!sessionData || now - sessionData.timestamp > SESSION_TIMEOUT) {
+    clearSession();
     if (overlay) overlay.classList.remove("hidden");
     if (dashboard) dashboard.classList.add("hidden");
-    sessionStorage.removeItem(SESSION_KEY);
   } else {
-    // Renovar marca de tiempo de actividad en sessionStorage
+    // Renovar marca de tiempo de actividad en sesión
     sessionData.timestamp = now;
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
+    setSession(sessionData);
     if (overlay) overlay.classList.add("hidden");
     if (dashboard) dashboard.classList.remove("hidden");
     initDashboard();
@@ -274,7 +305,10 @@ document.addEventListener("DOMContentLoaded", checkExistingLockout);
 const loginForm = document.getElementById("login-form");
 if (loginForm) {
   loginForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
 
     if (checkExistingLockout()) return;
 
@@ -296,14 +330,11 @@ if (loginForm) {
 
     if (matchedUser) {
       localStorage.removeItem(LOCKOUT_KEY);
-      sessionStorage.setItem(
-        SESSION_KEY,
-        JSON.stringify({
-          username: matchedUser.username,
-          role: matchedUser.role,
-          timestamp: Date.now()
-        })
-      );
+      setSession({
+        username: matchedUser.username,
+        role: matchedUser.role,
+        timestamp: Date.now()
+      });
       const errorEl = document.getElementById("login-error");
       if (errorEl) errorEl.classList.add("hidden");
       if (usernameEl) usernameEl.value = "";
@@ -477,10 +508,14 @@ if (createUserForm) {
 }
 
 // Evento de Logout
-document.getElementById("logout-btn").addEventListener("click", () => {
-  sessionStorage.removeItem(SESSION_KEY);
-  window.location.href = "index.html"; // Lo sacamos a la tienda principal
-});
+const logoutBtn = document.getElementById("logout-btn");
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", (e) => {
+    if (e) e.preventDefault();
+    clearSession();
+    window.location.href = "index.html"; // Lo sacamos a la tienda principal
+  });
+}
 
 // ==========================================
 // 2. MÓDULO ANALÍTICO (MOCK ENGINE)
@@ -725,7 +760,10 @@ function renderInventoryTable() {
             <img src="${p.imageUrl || (p.media?.images && p.media.images[0]) || 'https://images.unsplash.com/photo-1581636625402-29f2a01222ce'}" class="w-10 h-10 object-cover rounded border border-gray-700" alt="${p.name}">
             <div>
               <p class="font-bold text-white truncate max-w-[200px]">${p.name}</p>
-              <p class="text-xs text-gray-500">${displayId}</p>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="text-xs text-gray-500">${displayId}</span>
+                ${(p.badge || p.tag) ? `<span class="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${String(p.badge || p.tag).toLowerCase().includes('agotan') ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40' : 'bg-slate-900 text-yellow-300 border border-yellow-500/40'}">${p.badge || p.tag}</span>` : ''}
+              </div>
             </div>
           </td>
           <td class="p-4">
@@ -1134,6 +1172,9 @@ document.getElementById("open-crud-btn").addEventListener("click", () => {
   const featuredCheck = document.getElementById("prod-is-featured");
   if (featuredCheck) featuredCheck.checked = false;
 
+  const badgeSelect = document.getElementById("prod-badge");
+  if (badgeSelect) badgeSelect.value = "";
+
   renderVariantsList();
 
   modal.classList.remove("hidden");
@@ -1445,6 +1486,20 @@ window.editProduct = function (id) {
     featuredCheck.checked = Boolean(p.isFeatured);
   }
 
+  // Pre-cargar selección de insignia exclusiva (Badge CRO)
+  const badgeSelect = document.getElementById("prod-badge");
+  if (badgeSelect) {
+    const rawTag = (p.badge || p.tag || "").toString().trim();
+    const norm = rawTag.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (norm.includes("agotan")) {
+      badgeSelect.value = "Agotándose rápido";
+    } else if (norm.includes("top")) {
+      badgeSelect.value = "Top en venta";
+    } else {
+      badgeSelect.value = "";
+    }
+  }
+
   // Clonar profundamente las variantes existentes
   currentVariants = Array.isArray(p.variants) ? JSON.parse(JSON.stringify(p.variants)) : [];
   syncTempFromCurrentVariants();
@@ -1532,6 +1587,7 @@ form.addEventListener("submit", (e) => {
   const selectedCat = document.getElementById("prod-category").value;
   const selectedSubCat = document.getElementById("prod-subcategory")?.value || "Camisetas";
   const isFeaturedTrend = document.getElementById("prod-is-featured")?.checked || false;
+  const selectedBadge = document.getElementById("prod-badge")?.value || "";
 
   // Control de exclusividad de prenda Hero / Producto Tendencia
   if (isFeaturedTrend) {
@@ -1551,6 +1607,8 @@ form.addEventListener("submit", (e) => {
     description: sanitizeInput(document.getElementById("prod-desc").value),
     category: selectedCat,
     subCategory: selectedSubCat,
+    badge: selectedBadge,
+    tag: selectedBadge,
     isFeatured: isFeaturedTrend,
     media: {
       images: finalImages,
@@ -1567,7 +1625,12 @@ form.addEventListener("submit", (e) => {
 
   // Reemplazar elemento existente o insertar nuevo sin duplicar
   if (existingIndex > -1) {
-    products[existingIndex] = { ...products[existingIndex], ...productData };
+    products[existingIndex] = {
+      ...products[existingIndex],
+      ...productData,
+      badge: selectedBadge,
+      tag: selectedBadge
+    };
   } else {
     products.push(productData);
   }
@@ -1580,6 +1643,8 @@ form.addEventListener("submit", (e) => {
   const hiddenInput = document.getElementById("product-id");
   if (hiddenInput) hiddenInput.value = "";
   form.reset();
+  const badgeSelectEl = document.getElementById("prod-badge");
+  if (badgeSelectEl) badgeSelectEl.value = "";
   currentVariants = [];
   tempVariants = [];
   mediaBuffer = { images: [], video: "" };

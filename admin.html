@@ -54,10 +54,11 @@
     <!-- 🔒 OVERLAY DE LOGIN (Conforme a directiva de arquitectura WZSTORE) -->
     <div
       id="wz-login-overlay"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-dark min-h-screen overflow-y-auto p-4 transition-opacity duration-300"
+      class="fixed inset-0 z-[99999] flex items-center justify-center bg-dark min-h-screen min-h-[100dvh] overflow-y-auto p-4 transition-opacity duration-300 touch-manipulation"
+      style="touch-action: manipulation; z-index: 99999; -webkit-overflow-scrolling: touch;"
     >
       <div
-        class="bg-card p-8 rounded-xl border border-gray-800 w-full max-w-sm my-auto shadow-[0_0_40px_rgba(34,197,94,0.1)]"
+        class="bg-card p-8 rounded-xl border border-gray-800 w-full max-w-sm my-auto shadow-[0_0_40px_rgba(34,197,94,0.1)] relative z-10"
       >
         <div class="text-center mb-8">
           <h1 class="text-3xl font-black tracking-tighter uppercase mb-1">
@@ -65,7 +66,7 @@
           </h1>
           <p class="text-gray-400 text-sm">Acceso Restringido</p>
         </div>
-        <form id="login-form" class="space-y-4" method="POST" action="javascript:void(0);">
+        <form id="login-form" class="space-y-4" method="POST" action="javascript:void(0);" onsubmit="event.preventDefault();">
           <div>
             <input
               type="text"
@@ -76,6 +77,7 @@
               spellcheck="false"
               placeholder="Usuario"
               class="w-full bg-dark border border-gray-700 rounded px-4 py-3 text-white focus:outline-none focus:border-neon transition-colors"
+              style="touch-action: manipulation;"
               required
             />
           </div>
@@ -86,12 +88,14 @@
               autocomplete="current-password"
               placeholder="Contraseña"
               class="w-full bg-dark border border-gray-700 rounded px-4 py-3 text-white focus:outline-none focus:border-neon transition-colors"
+              style="touch-action: manipulation;"
               required
             />
           </div>
           <button
             type="submit"
             class="w-full bg-neon text-black font-bold py-3 rounded hover:bg-green-400 transition-colors uppercase tracking-wide cursor-pointer"
+            style="touch-action: manipulation;"
           >
             Desbloquear Panel
           </button>
@@ -612,6 +616,24 @@
                   <input type="checkbox" id="prod-is-featured" class="sr-only peer" />
                   <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
                 </label>
+              </div>
+
+              <!-- Selector de Badges Exclusivos CRO -->
+              <div class="pt-4 border-t border-gray-800">
+                <label class="block text-xs font-bold text-white uppercase tracking-wider mb-1">
+                  Insignia Exclusiva (Badge CRO)
+                </label>
+                <p class="text-[10px] text-gray-400 mb-2">
+                  Asigna o quita una etiqueta persuasiva exclusiva para la prenda.
+                </p>
+                <select
+                  id="prod-badge"
+                  class="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-xs text-white focus:border-neon outline-none cursor-pointer"
+                >
+                  <option value="">Sin etiqueta / Normal</option>
+                  <option value="Agotándose rápido">Agotándose rápido</option>
+                  <option value="Top en venta">Top en venta</option>
+                </select>
               </div>
             </div>
           </div>

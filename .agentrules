@@ -1,0 +1,6 @@
+# Reglas Técnicas WZSTORE
+- Entorno: HTML5, JavaScript Vanilla puro y Tailwind CSS (CDN). Cero librerías externas o frameworks.
+- Almacenamiento: Exclusivamente localStorage y archivos JSON locales. Sin backend.
+- Compatibilidad móvil: WebKit / Safari en iOS es prioritario. Evitar que el teclado desplace modales y manejar eventos submit con preventDefault() limpio.
+- Imágenes: Procesar siempre en Canvas a formato image/jpeg (máximo 800px). En etiquetas <img> usar siempre fallback con onerror.
+- Estilo de trabajo: Modifica funciones específicas. Prohibido reescribir archivos enteros o usar comentarios incompletos. Responde y comenta en español.

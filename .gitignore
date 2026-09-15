@@ -4,6 +4,5 @@
 *.jpg
 *.jpeg
 *.webp
-*.ico
+node_modules/
 .git/
-.continue/

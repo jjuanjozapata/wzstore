@@ -1,5 +1,5 @@
 // Service Worker para soporte Offline y carga ultrarrápida Cache-First
-const CACHE_NAME = 'wzstore-cache-v3';
+const CACHE_NAME = 'wzstore-cache-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -32,10 +32,20 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Estrategia Cache-First: responder con caché y recurrir a red si no existe
+// Listener fetch con manejo diferenciado para Supabase, navegación y recursos estáticos
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-  
+  if (event.request.url.includes('supabase.co')) return;
+
+  // Solicitudes de navegación: Network-First con fallback offline a index.html
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+
+  // Estrategia Cache-First para el resto de recursos
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
@@ -52,11 +62,6 @@ self.addEventListener('fetch', (event) => {
         });
         return networkResponse;
       });
-    }).catch(() => {
-      // Fallback offline a index si falla la red
-      if (event.request.mode === 'navigate') {
-        return caches.match('./index.html');
-      }
     })
   );
 });

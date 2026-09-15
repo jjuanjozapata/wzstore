@@ -38,13 +38,12 @@ const formatProductForSupabase = (prod) => {
 // Sanitizador contra Vector XSS por codificación de entidades completas
 const sanitizeInput = (str) => {
   if (typeof str !== 'string') return str;
-  return str.replace(/[<>"'/]/g, (char) => {
+  return str.replace(/[<>"']/g, (char) => {
     switch (char) {
       case '<': return '&lt;';
       case '>': return '&gt;';
       case '"': return '&quot;';
       case "'": return '&#x27;';
-      case '/': return '&#x2F;';
       default: return char;
     }
   }).trim();
@@ -125,7 +124,6 @@ const applyRolePermissions = () => {
 
   const isMasterAdmin = session.role === "admin";
   const roleBadge = document.getElementById("wz-current-role-badge");
-  const usersBtn = document.getElementById("wz-open-users-btn");
   const analyticsSection = document.querySelector("section:has(#kpi-revenue)") || document.querySelector("main section:first-of-type");
 
   if (roleBadge) {
@@ -133,15 +131,6 @@ const applyRolePermissions = () => {
     roleBadge.className = isMasterAdmin
       ? "text-xs px-2.5 py-1 rounded-full font-bold bg-slate-800 text-emerald-400 border border-emerald-500/30 uppercase"
       : "text-xs px-2.5 py-1 rounded-full font-bold bg-slate-800 text-amber-400 border border-amber-500/30 uppercase";
-  }
-
-  // Visualización del botón de gestión de usuarios
-  if (usersBtn) {
-    if (isMasterAdmin) {
-      usersBtn.classList.remove("hidden");
-    } else {
-      usersBtn.classList.add("hidden");
-    }
   }
 
   // Ocultar sección analítica completa a perfiles restringidos
@@ -201,7 +190,7 @@ async function checkAuth() {
 }
 
 // 10. Actualización Masiva de Precios por Categoría
-window.applyBulkPriceAdjustment = (targetCategory, percentageChange) => {
+window.applyBulkPriceAdjustment = async (targetCategory, percentageChange) => {
   const factor = 1 + (Number(percentageChange) / 100);
   if (isNaN(factor) || factor <= 0) {
     if (typeof showToast === "function") showToast("Porcentaje de ajuste inválido.", "error");
@@ -226,6 +215,7 @@ window.applyBulkPriceAdjustment = (targetCategory, percentageChange) => {
   });
 
   saveProducts(products);
+  if (supabase) await supabase.from("productos").upsert(products.map(formatProductForSupabase));
   renderInventoryTable();
   if (typeof recordAuditEvent === "function") {
     recordAuditEvent(`Ajuste masivo de precios: ${percentageChange}% en ${targetCategory} (${affectedCount} productos).`);
@@ -369,102 +359,6 @@ if (pwdForm) {
     } catch (err) {
       showToast(err.message || "Error al actualizar la contraseña.", "error");
     }
-  });
-}
-
-// Controladores y Render para Modal de Gestión de Usuarios
-const usersModal = document.getElementById("wz-users-modal");
-const openUsersBtn = document.getElementById("wz-open-users-btn");
-const closeUsersBtn = document.getElementById("wz-close-users-btn");
-const createUserForm = document.getElementById("wz-create-user-form");
-
-const renderUsersTable = () => {
-  const container = document.getElementById("wz-users-table-body");
-  if (!container) return;
-
-  const users = getStoredUsers();
-  const session = getCurrentSession();
-
-  container.innerHTML = users
-    .map((u) => {
-      const isCurrent = session?.username?.toLowerCase() === u.username.toLowerCase();
-      const badgeColor = u.role === "admin" ? "text-emerald-400 bg-emerald-950/40 border border-emerald-800" : "text-amber-400 bg-amber-950/40 border border-amber-800";
-      return `
-        <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 hover:border-slate-700 transition-all w-full">
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-xs text-white uppercase shrink-0">
-              ${(u.username || 'U')[0]}
-            </div>
-            <div>
-              <p class="font-bold text-white text-sm leading-tight flex items-center gap-1.5">
-                <span>${u.username}</span>
-                ${isCurrent ? '<span class="text-[10px] text-gray-400 font-normal">(Tú)</span>' : ""}
-              </p>
-              <span class="text-[9px] font-bold px-2 py-0.5 rounded uppercase mt-0.5 inline-block ${badgeColor}">
-                ${u.role === "admin" ? "Administrador" : "Trabajador"}
-              </span>
-            </div>
-          </div>
-          <div>
-            ${
-              !isCurrent
-                ? `<button type="button" onclick="deleteUserAccount('${u.username}')" class="px-3 py-1.5 bg-red-950/40 border border-red-800/60 hover:bg-red-900/60 text-red-400 hover:text-red-200 font-semibold rounded-lg text-xs transition-colors cursor-pointer">Eliminar</button>`
-                : '<span class="text-xs text-gray-500 font-medium px-2 py-1">Activo</span>'
-            }
-          </div>
-        </div>
-      `;
-    })
-    .join("");
-};
-
-window.deleteUserAccount = (usernameToDelete) => {
-  let users = getStoredUsers();
-  users = users.filter((u) => u.username.toLowerCase() !== usernameToDelete.toLowerCase());
-  saveStoredUsers(users);
-  renderUsersTable();
-  showToast(`Usuario "${usernameToDelete}" eliminado.`);
-};
-
-if (openUsersBtn) {
-  openUsersBtn.addEventListener("click", () => {
-    if (usersModal) {
-      renderUsersTable();
-      usersModal.classList.remove("hidden");
-    }
-  });
-}
-
-if (closeUsersBtn) {
-  closeUsersBtn.addEventListener("click", () => {
-    if (usersModal) usersModal.classList.add("hidden");
-  });
-}
-
-if (createUserForm) {
-  createUserForm.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const newUsername = sanitizeInput(document.getElementById("wz-new-username").value.trim().toLowerCase());
-    const newPassword = document.getElementById("wz-new-password").value;
-    const newRole = document.getElementById("wz-new-role").value;
-
-    const users = getStoredUsers();
-    if (users.some((u) => u.username.toLowerCase() === newUsername)) {
-      showToast("Ese nombre de usuario ya existe.", "error");
-      return;
-    }
-
-    users.push({
-      username: newUsername,
-      password: newPassword,
-      role: newRole,
-      createdAt: Date.now()
-    });
-
-    saveStoredUsers(users);
-    createUserForm.reset();
-    renderUsersTable();
-    showToast(`Usuario "${newUsername}" registrado.`);
   });
 }
 
@@ -1088,25 +982,6 @@ const compressImage = (file) => {
   });
 };
 
-// Procesamiento de video MP4 validando cuota máxima de 4MB
-const processVideo = (file) => {
-  return new Promise((resolve, reject) => {
-    const MAX_VIDEO_BYTES = 4 * 1024 * 1024; // Límite exacto de 4MB
-    if (file.size > MAX_VIDEO_BYTES) {
-      if (typeof showToast === "function") {
-        showToast("El video excede el límite permitido de 4MB.", "error");
-      } else {
-        alert("El video excede el límite permitido de 4MB.");
-      }
-      return resolve(null);
-    }
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = (err) => reject(err);
-  });
-};
-
 // Renderizado reactivo de miniaturas en el formulario
 const renderMediaPreviews = () => {
   const container = document.getElementById("wz-media-preview");
@@ -1124,8 +999,8 @@ const renderMediaPreviews = () => {
 
   if (mediaBuffer.video) {
     container.innerHTML += `
-      <div class="relative group rounded-lg overflow-hidden border border-slate-700 h-16 bg-slate-950 flex items-center justify-center">
-        <span class="text-[10px] font-bold text-emerald-400">MP4 OK</span>
+      <div class="relative group rounded-lg overflow-hidden border border-slate-700 h-16 bg-slate-950 flex items-center justify-center p-1 text-center">
+        <span class="text-[10px] font-bold text-emerald-400 truncate max-w-full">VIDEO OK</span>
         <button type="button" onclick="removeBufferedMedia('video')" class="absolute inset-0 bg-red-950/80 text-white text-[10px] font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">Eliminar</button>
       </div>
     `;
@@ -1134,7 +1009,11 @@ const renderMediaPreviews = () => {
 
 window.removeBufferedMedia = (type, index = null) => {
   if (type === "image") mediaBuffer.images.splice(index, 1);
-  if (type === "video") mediaBuffer.video = "";
+  if (type === "video") {
+    mediaBuffer.video = "";
+    const videoInput = document.getElementById("prod-video-url");
+    if (videoInput) videoInput.value = "";
+  }
   renderMediaPreviews();
 };
 
@@ -1159,6 +1038,15 @@ const initMediaDropZone = () => {
   fileInput.onchange = (e) => handleFiles(e.target.files);
 };
 
+// Enlace reactivo del campo de URL de video directo (CDN / Storage)
+const prodVideoUrlInput = document.getElementById("prod-video-url");
+if (prodVideoUrlInput) {
+  prodVideoUrlInput.addEventListener("input", (e) => {
+    mediaBuffer.video = e.target.value.trim();
+    renderMediaPreviews();
+  });
+}
+
 const handleFiles = async (files) => {
   const fileList = Array.from(files);
   for (const file of fileList) {
@@ -1169,13 +1057,6 @@ const handleFiles = async (files) => {
       }
       const compressed = await compressImage(file);
       mediaBuffer.images.push(compressed);
-    } else if (file.type === "video/mp4") {
-      if (mediaBuffer.video) {
-        alert("Límite alcanzado: Solo 1 video por prenda.");
-        continue;
-      }
-      const processedVid = await processVideo(file);
-      if (processedVid) mediaBuffer.video = processedVid;
     }
   }
   renderMediaPreviews();
@@ -1194,6 +1075,8 @@ document.getElementById("open-crud-btn").addEventListener("click", () => {
   currentVariants = [];
   tempVariants = [];
   mediaBuffer = { images: [], video: "" };
+  const videoInput = document.getElementById("prod-video-url");
+  if (videoInput) videoInput.value = "";
   renderMediaPreviews();
   initMediaDropZone();
 
@@ -1565,6 +1448,9 @@ window.editProduct = function (id) {
     video: p.media?.video || ""
   };
 
+  const videoInput = document.getElementById("prod-video-url");
+  if (videoInput) videoInput.value = mediaBuffer.video;
+
   // Forzar actualización visual de miniaturas de fotos/video cargados
   renderMediaPreviews();
   initMediaDropZone();
@@ -1595,7 +1481,7 @@ form.addEventListener("submit", async (e) => {
 
   // Resolver ID verificando tanto la variable en memoria como el campo oculto
   const hiddenIdVal = document.getElementById("product-id")?.value;
-  const resolvedTargetId = editingId ? String(editingId) : (hiddenIdVal ? String(hiddenIdVal) : null);
+  const resolvedTargetId = editingId ? String(editingId) : (hiddenIdVal ? String(hiddenIdVal) : ("wz-" + Date.now()));
 
   let products = loadProducts();
   const existingIndex = resolvedTargetId ? products.findIndex((p) => String(p.id) === resolvedTargetId) : -1;
@@ -1613,6 +1499,10 @@ form.addEventListener("submit", async (e) => {
     finalImages = ["https://images.unsplash.com/photo-1581636625402-29f2a01222ce"];
   }
 
+  const inputVideoUrl = document.getElementById("prod-video-url")?.value.trim() || "";
+  if (inputVideoUrl) {
+    mediaBuffer.video = inputVideoUrl;
+  }
   const finalVideo = mediaBuffer.video !== "" ? mediaBuffer.video : (existingProduct?.media?.video || "");
 
   // Calcular stock físico sumando todas las tallas
@@ -1640,7 +1530,8 @@ form.addEventListener("submit", async (e) => {
   if (isFeaturedTrend) {
     products = products.map((prod) => ({
       ...prod,
-      isFeatured: String(prod.id) === String(resolvedTargetId)
+      isFeatured: String(prod.id) === String(resolvedTargetId),
+      is_featured: String(prod.id) === String(resolvedTargetId)
     }));
     if (typeof recordAuditEvent === "function") {
       recordAuditEvent(`Producto destacado en Hero: "${sanitizeInput(document.getElementById("prod-name").value)}"`);
@@ -1649,7 +1540,7 @@ form.addEventListener("submit", async (e) => {
 
   // Construir objeto limpio del producto
   const productData = {
-    id: resolvedTargetId ? resolvedTargetId : "wz-" + Date.now(),
+    id: resolvedTargetId,
     name: sanitizeInput(document.getElementById("prod-name").value),
     description: sanitizeInput(document.getElementById("prod-desc").value),
     category: selectedCat,
@@ -1695,6 +1586,9 @@ form.addEventListener("submit", async (e) => {
   // Sincronización directa con la tabla 'productos' de Supabase (inserción y actualización)
   if (supabase) {
     try {
+      if (isFeaturedTrend) {
+        if (supabase) await supabase.from("productos").update({ is_featured: false }).neq("id", resolvedTargetId);
+      }
       const { error } = await supabase.from('productos').upsert(formatProductForSupabase(productData));
       if (error) {
         console.error("Error al sincronizar prenda con Supabase:", error);
@@ -1711,6 +1605,8 @@ form.addEventListener("submit", async (e) => {
   form.reset();
   const badgeSelectEl = document.getElementById("prod-badge");
   if (badgeSelectEl) badgeSelectEl.value = "";
+  const videoInput = document.getElementById("prod-video-url");
+  if (videoInput) videoInput.value = "";
   currentVariants = [];
   tempVariants = [];
   mediaBuffer = { images: [], video: "" };
@@ -1730,16 +1626,27 @@ async function fetchProductsFromSupabase() {
   try {
     const { data, error } = await supabase.from('productos').select('*');
     if (!error && Array.isArray(data) && data.length > 0) {
-      const mapped = data.map((row) => ({
-        ...row,
-        priceRegular: Number(row.price_regular ?? row.priceRegular ?? 0),
-        priceOffer: Number(row.price_offer ?? row.priceOffer ?? 0),
-        subCategory: row.sub_category ?? row.subCategory ?? "",
-        isOffer: Boolean(row.is_offer ?? row.isOffer),
-        isFeatured: Boolean(row.is_featured ?? row.isFeatured),
-        isAvailable: Boolean(row.is_available ?? row.isAvailable ?? true),
-        imageUrl: row.image_url ?? row.imageUrl
-      }));
+      const mapped = data.map((row) => {
+        let variants = row.variants;
+        if (typeof variants === "string") {
+          try {
+            variants = JSON.parse(variants);
+          } catch (e) {
+            variants = [];
+          }
+        }
+        return {
+          ...row,
+          variants: Array.isArray(variants) ? variants : [],
+          priceRegular: Number(row.price_regular ?? row.priceRegular ?? 0),
+          priceOffer: Number(row.price_offer ?? row.priceOffer ?? 0),
+          subCategory: row.sub_category ?? row.subCategory ?? "",
+          isOffer: Boolean(row.is_offer ?? row.isOffer),
+          isFeatured: Boolean(row.is_featured ?? row.isFeatured),
+          isAvailable: Boolean(row.is_available ?? row.isAvailable ?? true),
+          imageUrl: row.image_url ?? row.imageUrl
+        };
+      });
       saveProducts(mapped);
       renderInventoryTable();
     }
@@ -1784,12 +1691,13 @@ window.importCatalogBackup = (event) => {
   if (!file) return;
 
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     try {
       const importedData = JSON.parse(e.target.result);
       if (!Array.isArray(importedData)) throw new Error("El archivo no contiene un catálogo válido.");
       
       saveProducts(importedData);
+      if (supabase) await supabase.from("productos").upsert(importedData.map(formatProductForSupabase));
       renderInventoryTable();
       if (typeof recordAuditEvent === "function") recordAuditEvent("Restauración de catálogo desde archivo JSON");
       if (typeof showToast === "function") showToast("Catálogo restaurado exitosamente.");

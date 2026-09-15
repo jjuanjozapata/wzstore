@@ -14,11 +14,11 @@
       content="Law6arK5Q5MIUwUbNko9dpcTkkXuRr6jEx1Y2-TUDdE"
     />
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <!-- Content Security Policy (CSP) Endurecido Enterprise -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://images.unsplash.com https://jjuanjozapata.github.io https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co; media-src 'self' data: blob: https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co; connect-src 'self' https://wa.me https://api.whatsapp.com https://web.whatsapp.com https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co; frame-ancestors 'none'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://wa.me https://api.whatsapp.com;"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://images.unsplash.com https://jjuanjozapata.github.io https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co; media-src 'self' data: blob: https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co; connect-src 'self' https://wa.me https://api.whatsapp.com https://web.whatsapp.com https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co wss://bthyaqpmvtyncnsbrouv.supabase.co wss://*.supabase.co; frame-ancestors 'none'; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://wa.me https://api.whatsapp.com;"
     />
     <!-- Título estricto para snippet de Google SERP sin sufijos adicionales -->
     <title>WZSTORE</title>
@@ -88,6 +88,11 @@
           catalog = rawData ? JSON.parse(rawData) : [];
         } catch (e) {
           catalog = [];
+        }
+        if (!Array.isArray(catalog) || catalog.length === 0) {
+          if (typeof INITIAL_DATABASE !== 'undefined' && Array.isArray(INITIAL_DATABASE)) {
+            catalog = INITIAL_DATABASE;
+          }
         }
 
         const siteUrl = "https://jjuanjozapata.github.io/wzstore";

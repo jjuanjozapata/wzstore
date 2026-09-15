@@ -7,7 +7,7 @@
     <!-- Directiva Content Security Policy reforzada para consola administrativa -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co; media-src 'self' data: blob: https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co; connect-src 'self' https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co;"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co; media-src 'self' data: blob: https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co; connect-src 'self' https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co wss://bthyaqpmvtyncnsbrouv.supabase.co wss://*.supabase.co;"
     />
     <title>WZSTORE | Back-Office Administrativo</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -146,15 +146,6 @@
             </button>
             <input type="file" id="wz-restore-input" accept=".json" class="hidden" onchange="importCatalogBackup(event)" />
 
-            <!-- Botón de Gestión de Usuarios (Exclusivo Administrador) -->
-            <button
-              id="wz-open-users-btn"
-              type="button"
-              class="hidden text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition-colors font-medium cursor-pointer"
-            >
-              Usuarios
-            </button>
-
             <!-- Botón de Cambio de Contraseña -->
             <button
               id="wz-open-password-btn"
@@ -231,71 +222,6 @@
               </button>
             </div>
           </form>
-        </div>
-      </div>
-
-      <!-- MODAL ADMINISTRATIVO DE GESTIÓN DE USUARIOS Y ROLES -->
-      <div
-        id="wz-users-modal"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm hidden p-4"
-      >
-        <div class="bg-card w-full max-w-full sm:max-w-2xl rounded-2xl border border-gray-800 shadow-2xl p-4 sm:p-6 relative max-h-[90dvh] overflow-y-auto my-auto">
-          <div class="flex justify-between items-center mb-5 border-b border-gray-800 pb-3">
-            <h3 class="text-base font-bold text-white uppercase tracking-wider">Gestión de Cuentas y Roles</h3>
-            <button id="wz-close-users-btn" type="button" class="text-gray-400 hover:text-white text-2xl p-1 cursor-pointer">&times;</button>
-          </div>
-
-          <!-- Formulario de creación de cuenta -->
-          <form id="wz-create-user-form" class="space-y-3 bg-dark p-4 rounded-xl border border-gray-800 mb-6 w-full max-w-full">
-            <h4 class="text-xs font-bold text-neon uppercase tracking-wider">Crear Nuevo Usuario</h4>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label class="block text-xs text-gray-400 mb-1">Nombre de Usuario *</label>
-                <input
-                  type="text"
-                  id="wz-new-username"
-                  placeholder="ej: monitor1"
-                  class="w-full bg-card border border-gray-700 rounded-lg px-3 py-2 text-base sm:text-sm text-white focus:border-neon outline-none"
-                  required
-                />
-              </div>
-              <div>
-                <label class="block text-xs text-gray-400 mb-1">Contraseña Inicial *</label>
-                <input
-                  type="password"
-                  id="wz-new-password"
-                  placeholder="Mínimo 6 caract."
-                  class="w-full bg-card border border-gray-700 rounded-lg px-3 py-2 text-base sm:text-sm text-white focus:border-neon outline-none"
-                  minlength="6"
-                  required
-                />
-              </div>
-              <div>
-                <label class="block text-xs text-gray-400 mb-1">Rol Asignado *</label>
-                <select
-                  id="wz-new-role"
-                  class="w-full bg-card border border-gray-700 rounded-lg px-3 py-2 text-base sm:text-sm text-white focus:border-neon outline-none cursor-pointer"
-                >
-                  <option value="worker">Trabajador / Monitor</option>
-                  <option value="admin">Administrador Total</option>
-                </select>
-              </div>
-            </div>
-            <div class="flex justify-end pt-1">
-              <button
-                type="submit"
-                class="w-full sm:w-auto bg-neon text-black font-bold px-4 py-2 rounded-xl text-xs hover:bg-green-400 transition-colors uppercase cursor-pointer"
-              >
-                + Registrar Cuenta
-              </button>
-            </div>
-          </form>
-
-          <!-- Listado de usuarios en tarjetas verticales responsive -->
-          <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Usuarios Registrados</h4>
-          <div id="wz-users-table-body" class="flex flex-col gap-2 w-full">
-            <!-- Se inyecta por JS -->
-          </div>
         </div>
       </div>
 
@@ -459,51 +385,71 @@
                   </select>
                 </div>
               </div>
-              <!-- ZONA DE CARGA MULTIMEDIA REACTIVA (DRAG & DROP) -->
-              <div class="space-y-2 w-full">
-                <label
-                  class="block text-xs font-semibold uppercase tracking-wider text-slate-400"
-                  >Archivos Multimedia (Máx 3 Fotos + 1 Video MP4)</label
-                >
-                <div
-                  id="wz-drop-zone"
-                  class="relative flex flex-col items-center justify-center p-5 border-2 border-dashed border-slate-700 hover:border-emerald-500 rounded-xl bg-slate-900/50 cursor-pointer transition-colors duration-200 w-full"
-                >
-                  <input
-                    type="file"
-                    id="wz-media-input"
-                    multiple
-                    accept="image/*,video/mp4"
-                    class="hidden"
-                  />
-                  <svg
-                    class="w-8 h-8 text-emerald-500 mb-2"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+              <!-- ZONA DE CARGA MULTIMEDIA REACTIVA -->
+              <div class="space-y-3 w-full">
+                <div>
+                  <label
+                    class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1"
+                    >Fotos del Producto (Máx 3 imágenes)</label
                   >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                  <div
+                    id="wz-drop-zone"
+                    class="relative flex flex-col items-center justify-center p-5 border-2 border-dashed border-slate-700 hover:border-emerald-500 rounded-xl bg-slate-900/50 cursor-pointer transition-colors duration-200 w-full"
+                  >
+                    <input
+                      type="file"
+                      id="wz-media-input"
+                      multiple
+                      accept="image/*"
+                      class="hidden"
                     />
-                  </svg>
-                  <p class="text-xs text-slate-300 font-medium text-center">
-                    Arrastra tus archivos aquí o haz
-                    <span class="text-emerald-400 underline"
-                      >clic para explorar</span
+                    <svg
+                      class="w-8 h-8 text-emerald-500 mb-2"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
                     >
-                  </p>
-                  <p class="text-[10px] text-slate-500 mt-1 text-center">
-                    Imágenes auto-optimizadas a 800px | MP4 hasta 4MB
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                      />
+                    </svg>
+                    <p class="text-xs text-slate-300 font-medium text-center">
+                      Arrastra tus fotos aquí o haz
+                      <span class="text-emerald-400 underline"
+                        >clic para explorar</span
+                      >
+                    </p>
+                    <p class="text-[10px] text-slate-500 mt-1 text-center">
+                      Imágenes auto-optimizadas a 800px (JPG)
+                    </p>
+                  </div>
+                  <!-- Miniaturas reactivas -->
+                  <div
+                    id="wz-media-preview"
+                    class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 w-full"
+                  ></div>
+                </div>
+
+                <!-- Input de URL directa para video -->
+                <div>
+                  <label
+                    for="prod-video-url"
+                    class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1"
+                    >Video del Producto (URL CDN o Supabase Storage)</label
+                  >
+                  <input
+                    type="url"
+                    id="prod-video-url"
+                    placeholder="https://.../video.mp4"
+                    class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2 text-white focus:border-neon outline-none text-base sm:text-sm"
+                  />
+                  <p class="text-[10px] text-gray-500 mt-1">
+                    Ingresa una URL pública directa (CDN o Supabase Storage) para evitar archivos pesados en memoria local.
                   </p>
                 </div>
-                <!-- Miniaturas reactivas -->
-                <div
-                  id="wz-media-preview"
-                  class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 w-full"
-                ></div>
               </div>
               <div>
                 <label class="block text-sm text-gray-400 mb-1"

@@ -36,7 +36,8 @@ body {
 
 /* Panel Deslizable del Carrito - Curva Bézier fluida */
 .drawer-cart {
-  position: fixed; top: 0; right: -100%; width: 100%; max-width: 420px; height: 100vh;
+  position: fixed; top: 0; right: -100%; width: 100%; max-width: 420px;
+  height: 100vh; height: 100dvh; max-height: 100dvh; padding-bottom: env(safe-area-inset-bottom);
   background-color: var(--bg-panel); border-left: 1px solid var(--border-struct);
   transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 100;
@@ -54,10 +55,16 @@ body {
 /* Modal Checkout */
 .modal-checkout {
   position: fixed; inset: 0; z-index: 110; display: none;
+  height: 100vh; height: 100dvh; max-height: 100dvh; padding-bottom: env(safe-area-inset-bottom);
   background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);
   align-items: center; justify-content: center;
 }
 .modal-checkout.active { display: flex; }
+
+/* Modal de Alertas y Notificaciones */
+#wz-store-modal {
+  z-index: 200;
+}
 
 /* Skeleton Loader LCP Friendly */
 .skeleton-box {

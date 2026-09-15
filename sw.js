@@ -1,5 +1,5 @@
 // Service Worker para soporte Offline y carga ultrarrápida Cache-First
-const CACHE_NAME = 'wzstore-core-v1';
+const CACHE_NAME = 'wzstore-cache-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -12,6 +12,7 @@ const ASSETS_TO_CACHE = [
 
 // Instalación y almacenamiento inicial de recursos críticos
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return cache.addAll(ASSETS_TO_CACHE);

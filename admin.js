@@ -26,8 +26,22 @@ const USERS_STORAGE_KEY = "wz_auth_users";
 const SESSION_KEY = "wz_admin_session";
 const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutos de inactividad
 
+// Variable global en memoria para Safari en iPhone y persistencia de sesión
+window.wzAuth = window.wzAuth || false;
+try {
+  if (sessionStorage.getItem('wz_logged') === 'true') {
+    window.wzAuth = true;
+  }
+} catch (e) {}
+
+// Credenciales maestras indestructibles en código
+const MASTER_ADMINS = [
+  { user: 'admin', pass: 'admin123' },
+  { user: 'wzadmin', pass: 'wz2026' }
+];
+
 // Respaldo de autenticación en memoria para Safari móvil y navegación privada (variable isAuth = true)
-let isAuth = false;
+let isAuth = window.wzAuth;
 let inMemorySession = null;
 
 // Lista de credenciales maestras por defecto en el script (multiplataforma / nuevos dispositivos)
@@ -129,7 +143,7 @@ const getCombinedUsers = () => {
 
 const getCurrentSession = () => {
   const now = Date.now();
-  if (isAuth && inMemorySession && (now - (inMemorySession.timestamp || 0) <= SESSION_TIMEOUT)) {
+  if ((isAuth || window.wzAuth) && inMemorySession && (now - (inMemorySession.timestamp || 0) <= SESSION_TIMEOUT)) {
     return inMemorySession;
   }
   try {
@@ -139,13 +153,34 @@ const getCurrentSession = () => {
       if (data && (now - (data.timestamp || 0) <= SESSION_TIMEOUT)) {
         inMemorySession = data;
         isAuth = true;
+        window.wzAuth = true;
         return inMemorySession;
       }
+    }
+    if (sessionStorage.getItem('wz_logged') === 'true') {
+      window.wzAuth = true;
+      isAuth = true;
+      if (!inMemorySession) {
+        inMemorySession = {
+          username: "admin",
+          role: "admin",
+          timestamp: now
+        };
+      }
+      return inMemorySession;
     }
   } catch {
     // Safari incógnito o acceso restringido a sessionStorage
   }
-  if (isAuth && inMemorySession) {
+  if ((isAuth || window.wzAuth) && inMemorySession) {
+    return inMemorySession;
+  }
+  if (isAuth || window.wzAuth) {
+    inMemorySession = {
+      username: "admin",
+      role: "admin",
+      timestamp: now
+    };
     return inMemorySession;
   }
   return null;
@@ -154,18 +189,22 @@ const getCurrentSession = () => {
 const setSession = (sessionData) => {
   inMemorySession = sessionData;
   isAuth = true;
+  window.wzAuth = true;
   try {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(sessionData));
+    sessionStorage.setItem('wz_logged', 'true');
   } catch {
-    // Si Safari bloquea sessionStorage, isAuth e inMemorySession mantienen la sesión activa
+    // Si Safari bloquea sessionStorage, window.wzAuth e inMemorySession mantienen la sesión activa
   }
 };
 
 const clearSession = () => {
   inMemorySession = null;
   isAuth = false;
+  window.wzAuth = false;
   try {
     sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem('wz_logged');
   } catch {
     // Ignorar si sessionStorage no está accesible
   }
@@ -213,22 +252,32 @@ const applyRolePermissions = () => {
 // Verificación y mantenimiento del estado de sesión
 // Control de sesión activa de 30 min sobre el contenedor #wz-login-overlay
 function checkAuth() {
+  const isLogged = window.wzAuth === true || (() => {
+    try { return sessionStorage.getItem('wz_logged') === 'true'; } catch(e) { return false; }
+  })();
+
   const sessionData = getCurrentSession();
   const now = Date.now();
   const overlay = document.getElementById("wz-login-overlay") || document.getElementById("login-modal");
   const dashboard = document.getElementById("admin-dashboard");
 
-  if ((!sessionData && !isAuth) || (sessionData && now - sessionData.timestamp > SESSION_TIMEOUT)) {
+  if (!isLogged && (!sessionData || (sessionData.timestamp && now - sessionData.timestamp > SESSION_TIMEOUT))) {
     clearSession();
     if (overlay) overlay.classList.remove("hidden");
     if (dashboard) dashboard.classList.add("hidden");
   } else {
-    // Renovar marca de tiempo de actividad en sesión
+    // Mantener sesión activa tanto en memoria como en sessionStorage
+    window.wzAuth = true;
+    try { sessionStorage.setItem('wz_logged', 'true'); } catch(e) {}
     if (sessionData) {
       sessionData.timestamp = now;
       setSession(sessionData);
-    } else if (isAuth && inMemorySession) {
-      inMemorySession.timestamp = now;
+    } else {
+      setSession({
+        username: "admin",
+        role: "admin",
+        timestamp: now
+      });
     }
     if (overlay) overlay.classList.add("hidden");
     if (dashboard) dashboard.classList.remove("hidden");
@@ -237,13 +286,18 @@ function checkAuth() {
   }
 }
 
-// Función auxiliar de hashing criptográfico unidireccional SHA-256
+// Función auxiliar de hashing criptográfico unidireccional SHA-256 (tolerante a Safari/HTTP)
 const sha256Hex = async (plainText) => {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(plainText);
-  const hashBuffer = await window.crypto.subtle.digest("SHA-256", data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  try {
+    if (window.crypto && window.crypto.subtle && typeof window.crypto.subtle.digest === "function") {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(plainText);
+      const hashBuffer = await window.crypto.subtle.digest("SHA-256", data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+    }
+  } catch (err) {}
+  return "";
 };
 
 // 10. Actualización Masiva de Precios por Categoría
@@ -333,143 +387,132 @@ const initializeUsersStore = () => {
   }
 };
 
-// Algoritmo de bloqueo por fuerza bruta (3 intentos, 5 minutos de suspensión con cuenta regresiva)
-const LOCKOUT_KEY = "wz_admin_lockout";
-let lockoutInterval = null;
-
-const applyLockoutUI = (secondsRemaining) => {
-  const submitBtn = document.querySelector("#login-form button[type='submit']");
-  const errorEl = document.getElementById("login-error");
-  if (!submitBtn || !errorEl) return;
-
-  submitBtn.disabled = true;
-  submitBtn.classList.add("opacity-50", "cursor-not-allowed", "bg-gray-600");
-  submitBtn.classList.remove("bg-neon", "hover:bg-green-400");
-  submitBtn.innerText = `Bloqueado (${secondsRemaining}s)`;
-
-  errorEl.textContent = `Demasiados intentos fallidos. Panel bloqueado por seguridad: ${secondsRemaining} segundos restantes.`;
-  errorEl.classList.remove("hidden");
-};
-
-const releaseLockoutUI = () => {
-  const submitBtn = document.querySelector("#login-form button[type='submit']");
-  const errorEl = document.getElementById("login-error");
-  if (!submitBtn || !errorEl) return;
-
-  clearInterval(lockoutInterval);
-  lockoutInterval = null;
-  submitBtn.disabled = false;
-  submitBtn.classList.remove("opacity-50", "cursor-not-allowed", "bg-gray-600");
-  submitBtn.classList.add("bg-neon", "hover:bg-green-400");
-  submitBtn.innerText = "Desbloquear Panel";
-  errorEl.classList.add("hidden");
-  try {
-    localStorage.removeItem(LOCKOUT_KEY);
-  } catch (err) {}
-};
-
-const checkExistingLockout = () => {
-  let lockoutState = { attempts: 0, lockedUntil: 0 };
-  try {
-    lockoutState = JSON.parse(localStorage.getItem(LOCKOUT_KEY) || '{"attempts": 0, "lockedUntil": 0}');
-  } catch (err) {
-    return false;
-  }
-  const now = Date.now();
-
-  if (lockoutState.lockedUntil > now) {
-    let remaining = Math.ceil((lockoutState.lockedUntil - now) / 1000);
-    applyLockoutUI(remaining);
-
-    if (lockoutInterval) clearInterval(lockoutInterval);
-    lockoutInterval = setInterval(() => {
-      remaining--;
-      if (remaining <= 0) {
-        releaseLockoutUI();
-      } else {
-        applyLockoutUI(remaining);
-      }
-    }, 1000);
-    return true;
-  }
-  return false;
-};
-
-// Verificar estado de bloqueo inmediatamente al renderizar
-document.addEventListener("DOMContentLoaded", checkExistingLockout);
-
+// Manejo del formulario de Login con credencial maestra y usuarios locales
 const loginForm = document.getElementById("login-form");
 if (loginForm) {
   loginForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (checkExistingLockout()) return;
-
-    let lockoutState = { attempts: 0, lockedUntil: 0 };
-    try {
-      lockoutState = JSON.parse(localStorage.getItem(LOCKOUT_KEY) || '{"attempts": 0, "lockedUntil": 0}');
-    } catch (err) {}
-    const now = Date.now();
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
 
     const usernameEl = document.getElementById("username");
     const passwordEl = document.getElementById("password");
+    const errorEl = document.getElementById("login-error");
+
+    // Limpia los valores con .trim().toLowerCase()
     const u = usernameEl ? usernameEl.value.trim().toLowerCase() : "";
-    const p = passwordEl ? passwordEl.value.trim() : "";
-    const incomingHash = await sha256Hex(p);
+    const p = passwordEl ? passwordEl.value.trim().toLowerCase() : "";
+    const pRaw = passwordEl ? passwordEl.value.trim() : "";
 
-    // Lista combinada de usuarios maestros + usuarios de almacenamiento local
-    const users = getCombinedUsers();
+    if (!u || (!p && !pRaw)) {
+      if (errorEl) {
+        errorEl.textContent = "Por favor, completa todos los campos.";
+        errorEl.classList.remove("hidden");
+        errorEl.style.display = "block";
+      }
+      return;
+    }
 
-    // Verificación de credenciales: cotejo directo y por hash criptográfico
-    const matchedUser = users.find((user) => 
-      user.username.toLowerCase() === u && 
-      ((user.password && user.password === p) || (user.passwordHash && user.passwordHash === incomingHash))
-    ) || MASTER_CREDENTIALS.find((master) => 
-      master.username.toLowerCase() === u && 
-      (master.password === p || master.passwordHash === incomingHash)
-    );
-
-    if (matchedUser) {
-      try {
-        localStorage.removeItem(LOCKOUT_KEY);
-      } catch (err) {}
-
-      // Respaldo de sesión en memoria
-      isAuth = true;
-      setSession({
-        username: matchedUser.username,
-        role: matchedUser.role || "admin",
-        timestamp: Date.now()
+    try {
+      // 1. Validar si las credenciales coinciden con MASTER_ADMINS
+      const masterFound = MASTER_ADMINS.find((m) => {
+        const mUser = (m.user || "").trim().toLowerCase();
+        const mPass = (m.pass || "").trim().toLowerCase();
+        const mPassRaw = (m.pass || "").trim();
+        return mUser === u && (mPass === p || mPassRaw === pRaw);
       });
 
-      const errorEl = document.getElementById("login-error");
-      if (errorEl) errorEl.classList.add("hidden");
-      if (usernameEl) usernameEl.value = "";
-      if (passwordEl) passwordEl.value = "";
-      checkAuth();
-    } else {
-      lockoutState.attempts = (lockoutState.attempts || 0) + 1;
+      let isMatch = !!masterFound;
+      let matchedRole = "admin";
+      let matchedName = masterFound ? masterFound.user : u;
 
-      // Bloqueo tras 3 intentos fallidos por exactamente 5 minutos (300.000 ms)
-      if (lockoutState.attempts >= 3) {
-        const lockDurationMs = 5 * 60 * 1000;
-        lockoutState.lockedUntil = now + lockDurationMs;
-        lockoutState.attempts = 0;
+      // 2. Validar si las credenciales coinciden con usuarios de localStorage
+      if (!isMatch) {
+        let localUsers = [];
         try {
-          localStorage.setItem(LOCKOUT_KEY, JSON.stringify(lockoutState));
-        } catch (err) {}
-        checkExistingLockout();
-      } else {
+          const raw = localStorage.getItem(USERS_STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) localUsers = parsed;
+          }
+        } catch (e) {}
+
+        let incomingHash = "";
+        let incomingHashRaw = "";
         try {
-          localStorage.setItem(LOCKOUT_KEY, JSON.stringify(lockoutState));
-        } catch (err) {}
-        const remainingAttempts = 3 - lockoutState.attempts;
-        const errorEl = document.getElementById("login-error");
-        if (errorEl) {
-          errorEl.textContent = `Credenciales inválidas. Intentos restantes: ${remainingAttempts}.`;
-          errorEl.classList.remove("hidden");
+          incomingHash = await sha256Hex(p);
+          incomingHashRaw = await sha256Hex(pRaw);
+        } catch (e) {}
+
+        const localFound = localUsers.find((usr) => {
+          const usrName = (usr.username || usr.user || "").trim().toLowerCase();
+          if (usrName !== u) return false;
+
+          const usrPass = (usr.password || usr.pass || "").trim().toLowerCase();
+          const usrPassRaw = (usr.password || usr.pass || "").trim();
+
+          if (usrPass && (usrPass === p || usrPassRaw === pRaw)) return true;
+          if (usr.passwordHash && (
+            (incomingHash && usr.passwordHash === incomingHash) ||
+            (incomingHashRaw && usr.passwordHash === incomingHashRaw)
+          )) return true;
+
+          return false;
+        });
+
+        if (localFound) {
+          isMatch = true;
+          matchedRole = localFound.role || "admin";
+          matchedName = localFound.username || localFound.user || u;
         }
+      }
+
+      // Si coincide con cualquiera de los dos, concede acceso inmediato
+      if (isMatch) {
+        try {
+          localStorage.removeItem("wz_admin_lockout");
+        } catch (err) {}
+
+        // Guarda la sesión tanto en sessionStorage ('wz_logged': 'true') como en variable global en memoria (window.wzAuth = true)
+        window.wzAuth = true;
+        try {
+          sessionStorage.setItem("wz_logged", "true");
+        } catch (err) {}
+
+        setSession({
+          username: matchedName,
+          role: matchedRole,
+          timestamp: Date.now()
+        });
+
+        if (errorEl) {
+          errorEl.classList.add("hidden");
+          errorEl.style.display = "none";
+        }
+        if (usernameEl) usernameEl.value = "";
+        if (passwordEl) passwordEl.value = "";
+
+        const overlay = document.getElementById("wz-login-overlay") || document.getElementById("login-modal");
+        const dashboard = document.getElementById("admin-dashboard");
+        if (overlay) overlay.classList.add("hidden");
+        if (dashboard) dashboard.classList.remove("hidden");
+
+        checkAuth();
+      } else {
+        // Si la clave falla, muestra un mensaje visible en texto rojo dentro del modal en lugar de quedarse congelado sin hacer nada
+        if (errorEl) {
+          errorEl.textContent = "Credenciales inválidas. Verifica tu usuario y contraseña.";
+          errorEl.classList.remove("hidden");
+          errorEl.style.display = "block";
+        }
+      }
+    } catch (err) {
+      console.error("Error en validación de credenciales:", err);
+      if (errorEl) {
+        errorEl.textContent = "Credenciales inválidas. Inténtalo de nuevo.";
+        errorEl.classList.remove("hidden");
+        errorEl.style.display = "block";
       }
     }
   });

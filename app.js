@@ -168,28 +168,36 @@ const safeStorage = {
 };
 
 // Control de versión para sincronización automática de prendas en teléfonos
-const WZ_VERSION_DB = "1.1";
-window.WZ_VERSION_DB = WZ_VERSION_DB;
+const CURRENT_DATA_VER = "2.0";
+const WZ_VERSION_DB = CURRENT_DATA_VER;
+window.CURRENT_DATA_VER = CURRENT_DATA_VER;
+window.WZ_VERSION_DB = CURRENT_DATA_VER;
+
+const getBaseDatabase = () => {
+  if (typeof INITIAL_DATABASE !== "undefined" && Array.isArray(INITIAL_DATABASE) && INITIAL_DATABASE.length > 0) {
+    return JSON.parse(JSON.stringify(INITIAL_DATABASE));
+  }
+  return [];
+};
 
 const syncDatabaseVersion = () => {
   try {
-    const localVersion = safeStorage.getItem("wz_version_db") || (window.localStorage ? window.localStorage.getItem("wz_version_db") : null);
-    if (!localVersion || localVersion !== WZ_VERSION_DB) {
-      console.info(`[WZSTORE] Versión de datos actualizada a ${WZ_VERSION_DB}. Limpiando caché obsoleta...`);
-      safeStorage.removeItem("wz_core_products");
+    const localVersion = (window.localStorage ? (window.localStorage.getItem("wz_data_ver") || window.localStorage.getItem("wz_version_db")) : null) || safeStorage.getItem("wz_data_ver") || safeStorage.getItem("wz_version_db");
+    if (!localVersion || localVersion !== CURRENT_DATA_VER) {
+      console.info(`[WZSTORE] Versión de datos actualizada a ${CURRENT_DATA_VER}. Limpiando caché obsoleta...`);
       safeStorage.removeItem("wz_products");
+      safeStorage.removeItem("wz_core_products");
       if (window.localStorage) {
-        window.localStorage.removeItem("wz_core_products");
         window.localStorage.removeItem("wz_products");
+        window.localStorage.removeItem("wz_core_products");
       }
 
-      const freshData = (typeof INITIAL_DATABASE !== "undefined" && Array.isArray(INITIAL_DATABASE))
-        ? INITIAL_DATABASE
-        : [];
+      const freshData = getBaseDatabase();
       products = freshData;
-      safeStorage.setItem("wz_core_products", JSON.stringify(freshData));
       safeStorage.setItem("wz_products", JSON.stringify(freshData));
-      safeStorage.setItem("wz_version_db", WZ_VERSION_DB);
+      safeStorage.setItem("wz_core_products", JSON.stringify(freshData));
+      safeStorage.setItem("wz_data_ver", CURRENT_DATA_VER);
+      safeStorage.setItem("wz_version_db", CURRENT_DATA_VER);
       return true;
     }
   } catch (err) {
@@ -206,23 +214,30 @@ const initApp = () => {
   // Asegurar sincronización de versión al cargar la página
   syncDatabaseVersion();
 
-  const rawProducts = safeStorage.getItem("wz_core_products") || safeStorage.getItem("wz_products");
+  let loadedProducts = null;
+  const rawProducts = safeStorage.getItem("wz_products") || safeStorage.getItem("wz_core_products");
 
-  if (!rawProducts) {
-    const initialData = (typeof INITIAL_DATABASE !== "undefined" && Array.isArray(INITIAL_DATABASE))
-      ? INITIAL_DATABASE
-      : [];
-    products = initialData;
-    safeStorage.setItem("wz_core_products", JSON.stringify(initialData));
-    safeStorage.setItem("wz_products", JSON.stringify(initialData));
-  } else {
+  if (rawProducts) {
     try {
       const parsed = JSON.parse(rawProducts);
-      products = Array.isArray(parsed) && parsed.length > 0 ? parsed : ((typeof INITIAL_DATABASE !== "undefined" && Array.isArray(INITIAL_DATABASE)) ? INITIAL_DATABASE : []);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        loadedProducts = parsed;
+      }
     } catch (e) {
-      products = (typeof INITIAL_DATABASE !== "undefined" && Array.isArray(INITIAL_DATABASE)) ? INITIAL_DATABASE : [];
+      console.warn("[WZSTORE] Error parseando productos:", e);
     }
   }
+
+  // Si no hay datos, haz que consuma de inmediato el listado base sin quedarse en blanco
+  if (!loadedProducts || loadedProducts.length === 0) {
+    loadedProducts = getBaseDatabase();
+    safeStorage.setItem("wz_products", JSON.stringify(loadedProducts));
+    safeStorage.setItem("wz_core_products", JSON.stringify(loadedProducts));
+    safeStorage.setItem("wz_data_ver", CURRENT_DATA_VER);
+    safeStorage.setItem("wz_version_db", CURRENT_DATA_VER);
+  }
+
+  products = loadedProducts;
 
   // Cargar estado del carrito protegiendo integridad de tipos
   const storedCart = safeStorage.getItem("wz_cart");

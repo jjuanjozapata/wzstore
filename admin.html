@@ -7,7 +7,7 @@
     <!-- Directiva Content Security Policy reforzada para consola administrativa -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com https://*.supabase.co; media-src 'self' data: blob:; connect-src 'self' https://*.supabase.co;"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co; media-src 'self' data: blob:; connect-src 'self' https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co;"
     />
     <title>WZSTORE | Back-Office Administrativo</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -696,6 +696,7 @@
     </div>
 
     <!-- Carga del script lógico -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="admin.js"></script>
 
     <!-- CONTENEDOR DE NOTIFICACIONES TOAST -->

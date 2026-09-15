@@ -1,6 +1,6 @@
 // Configuración del cliente Supabase
-const SUPABASE_URL = "TU_SUPABASE_URL";
-const SUPABASE_KEY = "TU_SUPABASE_ANON_KEY";
+const SUPABASE_URL = "https://bthyaqpmvtyncnsbrouv.supabase.co";
+const SUPABASE_KEY = "sb_publishable_nsKtTkdnxMV2C0OUJbYhrw_xYR_7Am9";
 const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // Sanitización XSS Central
@@ -223,7 +223,16 @@ const initApp = async () => {
     try {
       const { data, error } = await supabase.from('productos').select('*');
       if (!error && Array.isArray(data) && data.length > 0) {
-        loadedProducts = data;
+        loadedProducts = data.map((row) => ({
+          ...row,
+          priceRegular: Number(row.price_regular ?? row.priceRegular ?? 0),
+          priceOffer: Number(row.price_offer ?? row.priceOffer ?? 0),
+          subCategory: row.sub_category ?? row.subCategory ?? "",
+          isOffer: Boolean(row.is_offer ?? row.isOffer),
+          isFeatured: Boolean(row.is_featured ?? row.isFeatured),
+          isAvailable: Boolean(row.is_available ?? row.isAvailable ?? true),
+          imageUrl: row.image_url ?? row.imageUrl
+        }));
         // Mantener localStorage únicamente como respaldo offline
         safeStorage.setItem("wz_core_products", JSON.stringify(loadedProducts));
         safeStorage.setItem("wz_products", JSON.stringify(loadedProducts));

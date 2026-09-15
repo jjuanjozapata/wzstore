@@ -4,9 +4,24 @@
  */
 
 // Configuración del cliente Supabase
-const SUPABASE_URL = "TU_SUPABASE_URL";
-const SUPABASE_KEY = "TU_SUPABASE_ANON_KEY";
+const SUPABASE_URL = "https://bthyaqpmvtyncnsbrouv.supabase.co";
+const SUPABASE_KEY = "sb_publishable_nsKtTkdnxMV2C0OUJbYhrw_xYR_7Am9";
 const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
+// Formateador para sincronización con tabla 'productos' en Supabase (soporta snake_case y camelCase)
+const formatProductForSupabase = (prod) => {
+  if (!prod) return prod;
+  return {
+    ...prod,
+    price_regular: Number(prod.price_regular ?? prod.priceRegular ?? 0),
+    price_offer: Number(prod.price_offer ?? prod.priceOffer ?? 0),
+    sub_category: prod.sub_category ?? prod.subCategory ?? "",
+    is_offer: Boolean(prod.is_offer ?? prod.isOffer),
+    is_featured: Boolean(prod.is_featured ?? prod.isFeatured),
+    is_available: Boolean(prod.is_available ?? prod.isAvailable ?? true),
+    image_url: prod.image_url ?? prod.imageUrl ?? ""
+  };
+};
 
 // ==========================================
 // 1. SISTEMA DE AUTENTICACIÓN
@@ -908,7 +923,7 @@ function initRestockModal() {
       target.isAvailable = true;
       saveProducts(products);
       if (supabase) {
-        supabase.from('productos').upsert(target).catch((err) => console.error("Error en Supabase:", err));
+        supabase.from('productos').upsert(formatProductForSupabase(target)).catch((err) => console.error("Error en Supabase:", err));
       }
     }
 
@@ -936,7 +951,7 @@ function openRestockModal(target) {
       if (idx > -1) products[idx] = target;
       saveProducts(products);
       if (supabase) {
-        supabase.from('productos').upsert(target).catch((err) => console.error("Error en Supabase:", err));
+        supabase.from('productos').upsert(formatProductForSupabase(target)).catch((err) => console.error("Error en Supabase:", err));
       }
     }
     renderInventoryTable();
@@ -992,7 +1007,7 @@ window.toggleProductStatus = async function(id) {
     // Sincronización directa con Supabase
     if (supabase) {
       try {
-        const { error } = await supabase.from('productos').upsert(target);
+        const { error } = await supabase.from('productos').upsert(formatProductForSupabase(target));
         if (error) console.error("Error al actualizar disponibilidad en Supabase:", error);
       } catch (err) {
         console.error("Fallo de conexión al actualizar en Supabase:", err);
@@ -1624,18 +1639,25 @@ form.addEventListener("submit", async (e) => {
     description: sanitizeInput(document.getElementById("prod-desc").value),
     category: selectedCat,
     subCategory: selectedSubCat,
+    sub_category: selectedSubCat,
     badge: selectedBadge,
     tag: selectedBadge,
     isFeatured: isFeaturedTrend,
+    is_featured: isFeaturedTrend,
     media: {
       images: finalImages,
       video: finalVideo
     },
     imageUrl: finalImages[0],
+    image_url: finalImages[0],
     priceRegular: priceReg,
+    price_regular: priceReg,
     isOffer: isOffer,
+    is_offer: isOffer,
     priceOffer: priceOff,
+    price_offer: priceOff,
     isAvailable: preservedAvailable,
+    is_available: preservedAvailable,
     status: preservedStatus,
     variants: currentVariants
   };
@@ -1658,7 +1680,7 @@ form.addEventListener("submit", async (e) => {
   // Sincronización directa con la tabla 'productos' de Supabase (inserción y actualización)
   if (supabase) {
     try {
-      const { error } = await supabase.from('productos').upsert(productData);
+      const { error } = await supabase.from('productos').upsert(formatProductForSupabase(productData));
       if (error) {
         console.error("Error al sincronizar prenda con Supabase:", error);
       }
@@ -1693,7 +1715,17 @@ async function fetchProductsFromSupabase() {
   try {
     const { data, error } = await supabase.from('productos').select('*');
     if (!error && Array.isArray(data) && data.length > 0) {
-      saveProducts(data);
+      const mapped = data.map((row) => ({
+        ...row,
+        priceRegular: Number(row.price_regular ?? row.priceRegular ?? 0),
+        priceOffer: Number(row.price_offer ?? row.priceOffer ?? 0),
+        subCategory: row.sub_category ?? row.subCategory ?? "",
+        isOffer: Boolean(row.is_offer ?? row.isOffer),
+        isFeatured: Boolean(row.is_featured ?? row.isFeatured),
+        isAvailable: Boolean(row.is_available ?? row.isAvailable ?? true),
+        imageUrl: row.image_url ?? row.imageUrl
+      }));
+      saveProducts(mapped);
       renderInventoryTable();
     }
   } catch (err) {

@@ -861,13 +861,14 @@
       <button
         type="button"
         id="wz-sticky-cta"
-        data-action="open-cart"
-        class="shrink-0 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-black text-[11px] uppercase tracking-wider px-4 py-2.5 rounded-lg transition-transform flex items-center gap-1.5 shadow-md shadow-emerald-500/20"
+        data-action="scroll-catalog"
+        class="shrink-0 bg-slate-800 hover:bg-slate-700 active:scale-95 text-white font-black text-[11px] uppercase tracking-wider px-4 py-2.5 rounded-lg transition-transform flex items-center gap-1.5 shadow-md border border-slate-700 cursor-pointer"
       >
         <svg class="w-4 h-4 fill-current" viewBox="0 0 20 20">
-          <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
+          <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+          <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
         </svg>
-        <span>Ver Carro</span>
+        <span>Ver Vitrina</span>
       </button>
     </div>
 
@@ -885,6 +886,16 @@
     </script>
 
     <div id="wz-social-toast" class="fixed bottom-24 left-4 z-40 max-w-xs bg-[#111726]/95 border border-slate-800 p-3 rounded-xl shadow-2xl backdrop-blur-md transform -translate-x-full opacity-0 transition-all duration-500 pointer-events-none flex items-center gap-3"></div>
+
+    <div id="wz-size-sheet-overlay" class="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 hidden opacity-0 transition-opacity duration-300"></div>
+    <div id="wz-size-sheet" class="fixed bottom-0 left-0 right-0 z-50 bg-[#111726] border-t border-slate-800 rounded-t-2xl p-5 transform translate-y-full transition-transform duration-300 max-w-lg mx-auto sm:hidden pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
+      <div class="w-12 h-1.5 bg-slate-700 rounded-full mx-auto mb-4"></div>
+      <div class="flex items-center justify-between mb-3">
+        <h3 id="wz-sheet-title" class="text-sm font-black text-white uppercase truncate">Selecciona tu Talla</h3>
+        <button type="button" id="wz-close-sheet-btn" class="text-slate-400 hover:text-white text-xl leading-none">&times;</button>
+      </div>
+      <div id="wz-sheet-sizes" class="flex flex-wrap gap-2 mb-4"></div>
+    </div>
   </body>
 </html>
 

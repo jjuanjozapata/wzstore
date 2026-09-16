@@ -35,10 +35,27 @@ const formatProductForSupabase = (prod) => {
 // ==========================================
 // 1. SISTEMA DE AUTENTICACIÓN
 // ==========================================
+// Utilidad para decodificar entidades HTML preexistentes
+const decodeEntities = (str) => {
+  if (typeof str !== 'string') return str;
+  if (typeof document !== 'undefined') {
+    const txt = document.createElement('textarea');
+    txt.innerHTML = str;
+    return txt.value;
+  }
+  return str
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+};
+
 // Sanitizador contra Vector XSS por codificación de entidades completas
 const sanitizeInput = (str) => {
   if (typeof str !== 'string') return str;
-  return str.replace(/[<>"']/g, (char) => {
+  const decoded = decodeEntities(str);
+  return decoded.replace(/[<>"']/g, (char) => {
     switch (char) {
       case '<': return '&lt;';
       case '>': return '&gt;';
@@ -1405,8 +1422,8 @@ window.editProduct = function (id) {
 
   // Cargar información textual básica
   document.getElementById("crud-modal-title").innerText = "Editar Prenda";
-  document.getElementById("prod-name").value = p.name || "";
-  document.getElementById("prod-desc").value = p.description || "";
+  document.getElementById("prod-name").value = decodeEntities(p.name || "");
+  document.getElementById("prod-desc").value = decodeEntities(p.description || "");
   document.getElementById("prod-price").value = priceRegular || 0;
 
   // Cargar taxonomía (Categoría principal y subcategoría)
@@ -1552,18 +1569,6 @@ form.addEventListener("submit", async (e) => {
   const isFeaturedTrend = document.getElementById("prod-is-featured")?.checked || false;
   const selectedBadge = document.getElementById("prod-badge")?.value || "";
 
-  // Control de exclusividad de prenda Hero / Producto Tendencia
-  if (isFeaturedTrend) {
-    products = products.map((prod) => ({
-      ...prod,
-      isFeatured: String(prod.id) === String(resolvedTargetId),
-      is_featured: String(prod.id) === String(resolvedTargetId)
-    }));
-    if (typeof recordAuditEvent === "function") {
-      recordAuditEvent(`Producto destacado en Hero: "${sanitizeInput(document.getElementById("prod-name").value)}"`);
-    }
-  }
-
   // Construir objeto limpio del producto
   const productData = {
     id: resolvedTargetId,
@@ -1606,25 +1611,21 @@ form.addEventListener("submit", async (e) => {
     products.push(productData);
   }
 
-  // Guardar en localStorage únicamente como respaldo offline
-  saveProducts(products);
-
   let syncError = false;
   // Sincronización directa con la tabla 'productos' de Supabase (inserción y actualización)
   if (wzClient) {
     try {
-      if (isFeaturedTrend) {
-        const { error: featError } = await wzClient.from("productos").update({ is_featured: false }).neq("id", resolvedTargetId);
-        if (featError) {
-          console.error("Error al sincronizar destacados en Supabase:", featError);
-          if (typeof showToast === "function") showToast(featError.message, "error");
-        }
-      }
       const { error } = await wzClient.from('productos').upsert(formatProductForSupabase(productData));
       if (error) {
         syncError = true;
         console.error("Error al sincronizar prenda con Supabase:", error);
         if (typeof showToast === "function") showToast(error.message, "error");
+      } else if (isFeaturedTrend) {
+        const { error: featError } = await wzClient.from("productos").update({ is_featured: false }).neq("id", resolvedTargetId);
+        if (featError) {
+          console.error("Error al sincronizar destacados en Supabase:", featError);
+          if (typeof showToast === "function") showToast(featError.message, "error");
+        }
       }
     } catch (err) {
       syncError = true;
@@ -1632,6 +1633,21 @@ form.addEventListener("submit", async (e) => {
       if (typeof showToast === "function") showToast(err.message, "error");
     }
   }
+
+  // Control de exclusividad de prenda Hero / Producto Tendencia tras confirmación exitosa
+  if (isFeaturedTrend && !syncError) {
+    products = products.map((prod) => ({
+      ...prod,
+      isFeatured: String(prod.id) === String(resolvedTargetId),
+      is_featured: String(prod.id) === String(resolvedTargetId)
+    }));
+    if (typeof recordAuditEvent === "function") {
+      recordAuditEvent(`Producto destacado en Hero: "${productData.name}"`);
+    }
+  }
+
+  // Guardar en localStorage únicamente como respaldo offline
+  saveProducts(products);
 
   // Limpiar estrictamente el estado y el formulario
   editingId = null;
@@ -1657,6 +1673,7 @@ form.addEventListener("submit", async (e) => {
 
 // Canal Realtime para mantener sincronizada la consola multiusuario en tiempo real
 let adminProductsRealtimeChannel = null;
+let realtimeDebounceTimer = null;
 
 function setupAdminRealtime() {
   if (wzClient && !adminProductsRealtimeChannel) {
@@ -1666,7 +1683,10 @@ function setupAdminRealtime() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'productos' },
         () => {
-          fetchProductsFromSupabase();
+          if (realtimeDebounceTimer) clearTimeout(realtimeDebounceTimer);
+          realtimeDebounceTimer = setTimeout(() => {
+            fetchProductsFromSupabase();
+          }, 400);
         }
       )
       .subscribe();
@@ -1676,7 +1696,6 @@ function setupAdminRealtime() {
 // Sincronización centralizada inicial desde la tabla 'productos' de Supabase
 async function fetchProductsFromSupabase() {
   if (!wzClient) return;
-  setupAdminRealtime();
   try {
     const { data, error } = await wzClient.from('productos').select('*');
     if (!error && Array.isArray(data) && data.length > 0) {

@@ -1,8 +1,10 @@
 // Service Worker para soporte Offline y carga ultrarrápida Cache-First
-const CACHE_NAME = 'wzstore-cache-v5';
+const CACHE_NAME = 'wzstore-cache-v6';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
+  './admin.html',
+  './politicas.html',
   './styles.css',
   './app.js',
   './db.js',
@@ -37,10 +39,14 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   if (event.request.url.includes('supabase.co')) return;
 
-  // Solicitudes de navegación: Network-First con fallback offline a index.html
+  // Solicitudes de navegación: Network-First con fallback offline
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('./index.html'))
+      fetch(event.request).catch(() => {
+        return caches.match(event.request).then((cachedResponse) => {
+          return cachedResponse || caches.match('./index.html');
+        });
+      })
     );
     return;
   }

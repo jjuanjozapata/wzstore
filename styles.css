@@ -106,3 +106,9 @@ body {
 [data-action="buy-now"]:active {
   transform: scale(0.95);
 }
+
+/* Transición panel inferior bottom sheet de tallas */
+#wz-size-sheet.open {
+  transform: translateY(0);
+}
+

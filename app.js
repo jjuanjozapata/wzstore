@@ -294,6 +294,38 @@ const loadProducts = async () => {
   return products;
 };
 
+// Autocompletado reactivo de datos de despacho desde almacenamiento seguro
+const autofillCheckoutData = () => {
+  const savedProfile = safeStorage.getItem("wz_customer_profile");
+  if (!savedProfile) return;
+
+  try {
+    const profile = JSON.parse(savedProfile);
+    if (!profile || typeof profile !== "object") return;
+
+    const fields = [
+      "chk-firstname",
+      "chk-lastname",
+      "chk-phone",
+      "chk-city",
+      "chk-postal",
+      "chk-addr",
+      "chk-extra-addr",
+      "chk-payment-method"
+    ];
+
+    fields.forEach((fieldId) => {
+      const input = document.getElementById(fieldId);
+      if (input && profile[fieldId] !== undefined && profile[fieldId] !== null) {
+        input.value = profile[fieldId];
+      }
+    });
+  } catch (e) {
+    console.error("Error al autorellenar datos de despacho:", e);
+  }
+};
+window.autofillCheckoutData = autofillCheckoutData;
+
 // Inicialización blindada con consulta prioritaria a Supabase y respaldo offline
 const initApp = async () => {
   await loadProducts();
@@ -324,6 +356,7 @@ const initApp = async () => {
   currentFilter.category = 'all';
   currentFilter.gender = 'todas';
   executeMasterFilters();
+  autofillCheckoutData();
   updateCartUI();
 
   // Inicializar canal Realtime de Supabase para actualización reactiva del catálogo y hero
@@ -626,6 +659,15 @@ document.addEventListener("click", (e) => {
   const target = e.target;
   if (!target) return;
 
+  // Cierre del panel inferior Bottom Sheet de tallas
+  if (target.id === "wz-size-sheet-overlay" || target.closest("#wz-close-sheet-btn")) {
+    e.preventDefault();
+    if (typeof window.closeSizeBottomSheet === "function") {
+      window.closeSizeBottomSheet();
+    }
+    return;
+  }
+
   // 1. Añadir al carrito desde tarjeta de catálogo
   const addBtn = target.closest("[data-action='add-to-cart'], button[onclick*='addToCart']");
   if (addBtn) {
@@ -646,47 +688,8 @@ document.addEventListener("click", (e) => {
   if (buyNowBtn) {
     e.preventDefault();
     const pId = buyNowBtn.dataset.productId;
-    const p = products.find((x) => String(x.id) === String(pId));
-    if (!p) return;
-
-    const state = uiState[p.id];
-    if (!state || state.sizeIdx === null || state.sizeIdx === undefined) {
-      window.showStoreModal("Por favor elige una talla disponible antes de realizar la compra.", "Selecciona una Talla");
-      return;
-    }
-
-    if (navigator.vibrate) navigator.vibrate(15);
-
-    const variant = p.variants?.[state.colorIdx || 0] || p.variants?.[0];
-    const sizeObj = variant?.sizes?.[state.sizeIdx];
-    if (!sizeObj || sizeObj.stock <= 0) {
-      window.showStoreModal("Esta talla no se encuentra disponible actualmente.", "Talla Agotada");
-      return;
-    }
-
-    const finalPrice = p.isOffer ? p.priceOffer : p.priceRegular;
-
-    // Limpia el carrito cart y añade esa única prenda
-    cart = [{
-      id: p.id,
-      name: p.name,
-      color: variant.color || "",
-      size: sizeObj.size,
-      price: finalPrice,
-      priceRegular: p.priceRegular,
-      qty: 1,
-      maxStock: sizeObj.stock,
-      img: p.imageUrl || (p.media?.images && p.media.images[0]) || "",
-    }];
-
-    saveCart();
-    updateCartUI();
-    if (typeof closeDrawer === "function") closeDrawer();
-    else if (typeof window.closeDrawer === "function") window.closeDrawer();
-
-    const checkoutModal = document.getElementById("modal-checkout");
-    if (checkoutModal) {
-      checkoutModal.classList.add("active");
+    if (pId && typeof window.executeBuyNow === "function") {
+      window.executeBuyNow(pId);
     }
     return;
   }
@@ -708,7 +711,7 @@ document.addEventListener("click", (e) => {
   }
 
   // 3. Abrir / Alternar Carrito
-  const openCartBtn = target.closest("#cart-btn, #wz-sticky-cta, [data-action='open-cart'], [data-action='toggle-cart']");
+  const openCartBtn = target.closest("#cart-btn, [data-action='open-cart'], [data-action='toggle-cart']");
   if (openCartBtn) {
     e.preventDefault();
     const drawer = document.getElementById("drawer-cart");
@@ -716,6 +719,19 @@ document.addEventListener("click", (e) => {
       window.closeDrawer();
     } else {
       window.openDrawer();
+    }
+    return;
+  }
+
+  // 3.1 Botón Sticky Mobile CTA
+  const stickyCtaBtn = target.closest("#wz-sticky-cta");
+  if (stickyCtaBtn) {
+    e.preventDefault();
+    if (cart.length > 0) {
+      document.getElementById("modal-checkout")?.classList.add("active");
+      if (typeof closeDrawer === "function") closeDrawer();
+    } else {
+      document.getElementById("catalog-grid")?.scrollIntoView({ behavior: "smooth" });
     }
     return;
   }
@@ -1019,7 +1035,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           const rect = card.getBoundingClientRect();
           if (rect.top >= 0 && rect.top <= 400) {
             const prodTitle = card.parentElement.querySelector("h3")?.innerText;
-            const prodPrice = card.parentElement.querySelector(".font-black")?.innerText;
+            const prodPrice = card.parentElement.querySelector("[data-product-price]")?.innerText;
             if (stickyTitle && prodTitle) stickyTitle.textContent = prodTitle;
             if (stickyPrice && prodPrice) stickyPrice.textContent = prodPrice;
             break;
@@ -1113,6 +1129,20 @@ const setupEventListeners = () => {
   if (paymentMethodSelect) {
     paymentMethodSelect.addEventListener("change", () => {
       updateCartUI();
+    });
+  }
+
+  // Conexión para el cierre del Bottom Sheet de tallas
+  const sheetCloseBtn = document.getElementById("wz-close-sheet-btn");
+  if (sheetCloseBtn) {
+    sheetCloseBtn.addEventListener("click", () => {
+      if (typeof window.closeSizeBottomSheet === "function") window.closeSizeBottomSheet();
+    });
+  }
+  const sheetOverlay = document.getElementById("wz-size-sheet-overlay");
+  if (sheetOverlay) {
+    sheetOverlay.addEventListener("click", () => {
+      if (typeof window.closeSizeBottomSheet === "function") window.closeSizeBottomSheet();
     });
   }
 };
@@ -1323,8 +1353,6 @@ const renderCatalog = (catalogData = null) => {
         data-product-id="${p.id}"
         data-front-src="${frontImg}"
         ${hasMultiplePhotos ? `data-back-src="${backImg}"` : ''}
-        onmouseenter="window.handleCardMouseEnter(this, '${p.id}')" 
-        onmouseleave="window.handleCardMouseLeave(this, '${p.id}')"
       >
         <!-- Skeleton loader animado de fondo -->
         <div class="skeleton-placeholder absolute inset-0 bg-slate-800 animate-pulse transition-opacity duration-300 pointer-events-none"></div>
@@ -1357,7 +1385,7 @@ const renderCatalog = (catalogData = null) => {
         <div class="mt-auto pt-3 border-t border-slate-800/80 flex items-center justify-between gap-3">
           <div class="flex-1 min-w-0">
             <span class="text-[10px] text-slate-400 uppercase font-semibold block leading-none mb-1 sm:hidden truncate">${p.name}</span>
-            <p class="text-xs sm:text-sm font-black text-emerald-400 truncate">$${finalPrice.toLocaleString("es-CO")} COP</p>
+            <p data-product-price class="text-xs sm:text-sm font-black text-emerald-400 truncate">$${finalPrice.toLocaleString("es-CO")} COP</p>
           </div>
           ${
             !isAgotado
@@ -1400,25 +1428,181 @@ window.selectSize = (productId, sizeIdx) => {
   renderCatalog();
 };
 
-// Agrega productos integrando el modal flotante de alertas para tallas y stock
-window.addToCart = (productId) => {
-  const p = products.find((x) => x.id === productId);
+// Cierre del Bottom Sheet de Selección de Talla
+const closeSizeBottomSheet = () => {
+  const overlay = document.getElementById("wz-size-sheet-overlay");
+  const sheet = document.getElementById("wz-size-sheet");
+
+  if (sheet) {
+    sheet.classList.remove("open");
+  }
+  if (overlay) {
+    overlay.classList.remove("opacity-100");
+    overlay.classList.add("opacity-0");
+    setTimeout(() => {
+      if (!sheet || !sheet.classList.contains("open")) {
+        overlay.classList.add("hidden");
+        sheet?.classList.add("sm:hidden");
+      }
+    }, 300);
+  }
+};
+window.closeSizeBottomSheet = closeSizeBottomSheet;
+
+// Despliegue interactivo del Bottom Sheet de Tallas
+const openSizeBottomSheet = (productId, mode = 'add') => {
+  const p = products.find((x) => String(x.id) === String(productId));
   if (!p) return;
 
-  const state = uiState[productId];
-  if (!state || state.sizeIdx === null) {
-    showNotificationModal("Selecciona tu Talla", "Por favor elige una talla disponible antes de agregar la prenda al carro.");
+  if (!uiState[p.id]) {
+    uiState[p.id] = { colorIdx: 0, sizeIdx: null };
+  }
+
+  const overlay = document.getElementById("wz-size-sheet-overlay");
+  const sheet = document.getElementById("wz-size-sheet");
+  const titleEl = document.getElementById("wz-sheet-title");
+  const sizesContainer = document.getElementById("wz-sheet-sizes");
+
+  if (!sheet || !overlay || !sizesContainer) return;
+
+  if (titleEl) {
+    titleEl.textContent = p.name ? `Selecciona tu Talla · ${p.name}` : "Selecciona tu Talla";
+  }
+
+  const state = uiState[p.id];
+  const variant = p.variants?.[state.colorIdx || 0] || p.variants?.[0];
+  const sizes = variant?.sizes || [];
+
+  if (sizes.length === 0) {
+    sizesContainer.innerHTML = `<p class="text-xs text-slate-400 py-2">No hay tallas disponibles para este producto.</p>`;
+  } else {
+    sizesContainer.innerHTML = sizes
+      .map((s, idx) => {
+        const stock = Number(s.stock) || 0;
+        const isOutOfStock = stock <= 0;
+        const isSelected = state.sizeIdx === idx;
+        if (isOutOfStock) {
+          return `
+            <button type="button" disabled class="flex-1 min-w-[70px] py-2.5 px-3 rounded-xl border border-slate-800 bg-slate-900/40 text-slate-600 line-through text-xs font-semibold cursor-not-allowed opacity-50 flex flex-col items-center justify-center">
+              <span class="text-xs font-bold leading-tight">${s.size}</span>
+              <span class="text-[10px] leading-tight mt-0.5">0 disp.</span>
+            </button>
+          `;
+        }
+        const borderBg = isSelected
+          ? "border-emerald-500 bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500"
+          : "border-slate-700 bg-slate-800 hover:border-emerald-400 text-white";
+        return `
+          <button type="button" data-sheet-size-index="${idx}" class="flex-1 min-w-[70px] py-2.5 px-3 rounded-xl border ${borderBg} text-xs font-semibold transition-all active:scale-95 cursor-pointer flex flex-col items-center justify-center shadow-sm">
+            <span class="text-sm font-black leading-tight">${s.size}</span>
+            <span class="text-[10px] text-slate-400 leading-tight mt-0.5">${stock} disp.</span>
+          </button>
+        `;
+      })
+      .join("");
+
+    sizesContainer.querySelectorAll("[data-sheet-size-index]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const sizeIdx = parseInt(btn.dataset.sheetSizeIndex, 10);
+        uiState[p.id].sizeIdx = sizeIdx;
+        if (navigator.vibrate) navigator.vibrate(15);
+        closeSizeBottomSheet();
+        if (typeof renderCatalog === "function") {
+          renderCatalog();
+        }
+        if (mode === "buy") {
+          window.executeBuyNow(p.id);
+        } else {
+          window.addToCart(p.id);
+        }
+      });
+    });
+  }
+
+  sheet.classList.remove("sm:hidden");
+  overlay.classList.remove("hidden");
+  void overlay.offsetWidth;
+  overlay.classList.remove("opacity-0");
+  overlay.classList.add("opacity-100");
+  sheet.classList.add("open");
+};
+window.openSizeBottomSheet = openSizeBottomSheet;
+
+// Lógica de compra directa inmediata
+const executeBuyNow = (productId) => {
+  const p = products.find((x) => String(x.id) === String(productId));
+  if (!p) return;
+
+  if (!uiState[p.id]) {
+    uiState[p.id] = { colorIdx: 0, sizeIdx: null };
+  }
+
+  const state = uiState[p.id];
+  if (!state || state.sizeIdx === null || state.sizeIdx === undefined) {
+    openSizeBottomSheet(p.id, 'buy');
     return;
   }
 
-  const variant = p.variants[state.colorIdx];
-  const sizeObj = variant.sizes[state.sizeIdx];
+  if (navigator.vibrate) navigator.vibrate(15);
+
+  const variant = p.variants?.[state.colorIdx || 0] || p.variants?.[0];
+  const sizeObj = variant?.sizes?.[state.sizeIdx];
+  if (!sizeObj || sizeObj.stock <= 0) {
+    window.showStoreModal("Esta talla no se encuentra disponible actualmente.", "Talla Agotada");
+    return;
+  }
+
+  const finalPrice = p.isOffer ? p.priceOffer : p.priceRegular;
+
+  // Limpia el carrito y añade esa única prenda para checkout inmediato
+  cart = [{
+    id: p.id,
+    name: p.name,
+    color: variant.color || "",
+    size: sizeObj.size,
+    price: finalPrice,
+    priceRegular: p.priceRegular,
+    qty: 1,
+    maxStock: sizeObj.stock,
+    img: p.imageUrl || (p.media?.images && p.media.images[0]) || "",
+  }];
+
+  saveCart();
+  updateCartUI();
+  if (typeof closeDrawer === "function") closeDrawer();
+  else if (typeof window.closeDrawer === "function") window.closeDrawer();
+
+  const checkoutModal = document.getElementById("modal-checkout");
+  if (checkoutModal) {
+    checkoutModal.classList.add("active");
+  }
+};
+window.executeBuyNow = executeBuyNow;
+
+// Agrega productos integrando el Bottom Sheet para tallas
+window.addToCart = (productId) => {
+  const p = products.find((x) => String(x.id) === String(productId));
+  if (!p) return;
+
+  if (!uiState[p.id]) {
+    uiState[p.id] = { colorIdx: 0, sizeIdx: null };
+  }
+
+  const state = uiState[p.id];
+  if (!state || state.sizeIdx === null || state.sizeIdx === undefined) {
+    openSizeBottomSheet(p.id, 'add');
+    return;
+  }
+
+  const variant = p.variants?.[state.colorIdx || 0] || p.variants?.[0];
+  const sizeObj = variant?.sizes?.[state.sizeIdx];
+  if (!sizeObj) return;
 
   const finalPrice = p.isOffer ? p.priceOffer : p.priceRegular;
 
   const existing = cart.find(
     (i) =>
-      i.id === p.id && i.color === variant.color && i.size === sizeObj.size,
+      String(i.id) === String(p.id) && i.color === variant.color && i.size === sizeObj.size,
   );
 
   if (existing) {
@@ -1431,13 +1615,13 @@ window.addToCart = (productId) => {
     cart.push({
       id: p.id,
       name: p.name,
-      color: variant.color,
+      color: variant.color || "",
       size: sizeObj.size,
       price: finalPrice,
       priceRegular: p.priceRegular,
       qty: 1,
       maxStock: sizeObj.stock,
-      img: p.imageUrl,
+      img: p.imageUrl || (p.media?.images && p.media.images[0]) || "",
     });
   }
 
@@ -1499,6 +1683,36 @@ const updateCartUI = () => {
   const badge = document.getElementById("cart-badge");
   const cartItemsContainer = document.getElementById("cart-items");
   const totalsContainer = document.getElementById("cart-totals");
+  const stickyCta = document.getElementById("wz-sticky-cta");
+
+  if (stickyCta) {
+    if (cart.length > 0) {
+      stickyCta.className = "shrink-0 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-black text-[11px] uppercase tracking-wider px-4 py-2.5 rounded-lg transition-transform flex items-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer";
+      stickyCta.innerHTML = `<svg class="w-4 h-4 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg><span>Finalizar Pedido (${cart.length})</span>`;
+      stickyCta.dataset.action = "open-checkout";
+      stickyCta.onclick = (e) => {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        const checkoutModal = document.getElementById("modal-checkout");
+        if (checkoutModal) checkoutModal.classList.add("active");
+        if (typeof closeDrawer === "function") closeDrawer();
+      };
+    } else {
+      stickyCta.className = "shrink-0 bg-slate-800 hover:bg-slate-700 active:scale-95 text-white font-black text-[11px] uppercase tracking-wider px-4 py-2.5 rounded-lg transition-transform flex items-center gap-1.5 shadow-md border border-slate-700 cursor-pointer";
+      stickyCta.innerHTML = `<svg class="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/></svg><span>Ver Vitrina</span>`;
+      stickyCta.dataset.action = "scroll-catalog";
+      stickyCta.onclick = (e) => {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        const catalogGrid = document.getElementById("catalog-grid");
+        if (catalogGrid) catalogGrid.scrollIntoView({ behavior: "smooth" });
+      };
+    }
+  }
 
   let totalItems = 0;
   let subtotal = 0;
@@ -1765,6 +1979,7 @@ const recoverCartFromUrl = () => {
 
 // Validación integral de checkout y formateo de orden para WhatsApp
 const processCheckout = () => {
+  const orderId = `WZ-${Date.now().toString().slice(-6)}`;
   if (!cart || cart.length === 0) {
     showNotificationModal("Carro Vacío", "No tienes artículos agregados en la orden.");
     return;
@@ -1810,6 +2025,19 @@ const processCheckout = () => {
     showNotificationModal("Dirección Incompleta", "Por favor especifica una dirección de entrega válida.");
     return;
   }
+
+  // Guardar datos de despacho validados en safeStorage bajo la clave wz_customer_profile
+  const customerProfile = {
+    "chk-firstname": rawFirstName.trim() || firstName,
+    "chk-lastname": rawLastName.trim() || lastName,
+    "chk-phone": rawPhone.trim() || phone,
+    "chk-city": rawCity.trim() || city,
+    "chk-postal": rawPostal.trim() || postal,
+    "chk-addr": rawAddr.trim() || addr,
+    "chk-extra-addr": rawExtraAddr.trim() || extraAddr,
+    "chk-payment-method": paymentMethod
+  };
+  safeStorage.setItem("wz_customer_profile", JSON.stringify(customerProfile));
 
   // Validación de montos exclusivamente contra la colección canónica 'products' obtenida de Supabase
   let verifiedSubtotal = 0;
@@ -1915,7 +2143,7 @@ const processCheckout = () => {
   const mathematicallyVerifiedTotal = verifiedSubtotal - calculatedDiscount + verifiedFinalShipping;
 
   // Maquetación del mensaje para despacho por WhatsApp
-  let msg = `🔥 *NUEVO PEDIDO WZSTORE* 🔥\n\n`;
+  let msg = `🔥 *PEDIDO #${orderId} - WZSTORE* 🔥\n\n`;
   msg += `👤 *Cliente:* ${firstName} ${lastName}\n`;
   msg += `📞 *Teléfono:* ${phone}\n`;
   msg += `📍 *Dirección:* ${addr}${extraAddr ? ` (${extraAddr})` : ""}\n`;
@@ -1935,7 +2163,7 @@ const processCheckout = () => {
   });
 
   // Cálculo del ahorro total del cliente y aplicación de la línea psicológica obligatoria
-  const verifiedSavings = (totalRegularCanon - mathematicallyVerifiedTotal);
+  const verifiedSavings = (totalRegularCanon - verifiedSubtotal) + calculatedDiscount;
   msg += `\n💰 *Total Liquidado: $${mathematicallyVerifiedTotal.toLocaleString("es-CO")} COP*\n`;
   if (verifiedSavings > 0) {
     msg += `🏷️ ¡Ahorro total en WZSTORE por promociones: $${verifiedSavings.toLocaleString("es-CO")} COP!\n`;

@@ -2479,6 +2479,7 @@ const processCheckout = () => {
     msg += `▪ ${decodeHtml(item.name)}\n   Color: ${decodeHtml(item.color)} | Talla: ${decodeHtml(item.size)} | Cant: ${itemQty} | Sub: $${item.subtotal.toLocaleString("es-CO")}\n`;
   });
 
+  // Cálculo del ahorro total del cliente y aplicación de la línea psicológica obligatoria
   const verifiedSavings = (totalRegularCanon - verifiedSubtotal) + calculatedDiscount;
   msg += `\n💰 *Total Liquidado: $${mathematicallyVerifiedTotal.toLocaleString("es-CO")} COP*\n`;
   if (verifiedSavings > 0) {

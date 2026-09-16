@@ -248,7 +248,7 @@ const loadProducts = async () => {
         });
         // Mantener localStorage únicamente como respaldo offline
         safeStorage.setItem("wz_core_products", JSON.stringify(loadedProducts));
-        safeStorage.setItem("wz_products", JSON.stringify(loadedProducts));
+        safeStorage.removeItem("wz_products");
       } else if (error) {
         console.warn("[WZSTORE] Error consultando 'productos' en Supabase:", error);
       }
@@ -266,6 +266,7 @@ const loadProducts = async () => {
         const parsed = JSON.parse(rawProducts);
         if (Array.isArray(parsed) && parsed.length > 0) {
           loadedProducts = parsed;
+          safeStorage.removeItem("wz_products");
         }
       } catch (e) {
         console.warn("[WZSTORE] Error parseando productos de caché local:", e);
@@ -276,8 +277,8 @@ const loadProducts = async () => {
   // 3. Fallback inicial si la caché está vacía
   if (!loadedProducts || loadedProducts.length === 0) {
     loadedProducts = getBaseDatabase();
-    safeStorage.setItem("wz_products", JSON.stringify(loadedProducts));
     safeStorage.setItem("wz_core_products", JSON.stringify(loadedProducts));
+    safeStorage.removeItem("wz_products");
     safeStorage.setItem("wz_data_ver", CURRENT_DATA_VER);
     safeStorage.setItem("wz_version_db", CURRENT_DATA_VER);
   }
@@ -729,6 +730,7 @@ document.addEventListener("click", (e) => {
     e.preventDefault();
     if (cart.length > 0) {
       document.getElementById("modal-checkout")?.classList.add("active");
+      if (typeof startCheckoutTimer === "function") startCheckoutTimer();
       if (typeof closeDrawer === "function") closeDrawer();
     } else {
       document.getElementById("catalog-grid")?.scrollIntoView({ behavior: "smooth" });
@@ -807,6 +809,7 @@ document.addEventListener("click", (e) => {
       return;
     }
     document.getElementById("modal-checkout")?.classList.add("active");
+    if (typeof startCheckoutTimer === "function") startCheckoutTimer();
     window.closeDrawer();
     return;
   }
@@ -927,6 +930,22 @@ document.addEventListener("click", (e) => {
   if (closeModalBtn) {
     e.preventDefault();
     window.closeStoreModal();
+    return;
+  }
+
+  // 18. Asesoría de producto y fit por WhatsApp
+  const askBtn = target.closest("[data-action='ask-product']");
+  if (askBtn) {
+    e.preventDefault();
+    const pId = askBtn.dataset.productId;
+    const prod = products.find((x) => String(x.id) === String(pId));
+    if (prod) {
+      const state = uiState[prod.id];
+      const variant = prod.variants?.[state?.colorIdx || 0] || prod.variants?.[0];
+      const selectedSize = (state?.sizeIdx !== null && state?.sizeIdx !== undefined) ? variant?.sizes?.[state.sizeIdx]?.size : null;
+      const sizeText = selectedSize ? ` (Talla: ${selectedSize})` : "";
+      window.openSupportChat("Quiero asesoría sobre la prenda " + prod.name + sizeText);
+    }
     return;
   }
 });
@@ -1320,6 +1339,11 @@ const renderCatalog = (catalogData = null) => {
         }
       }
 
+      // Chip de descuento para prendas en oferta
+      const discountBadgeHtml = (p.isOffer && p.priceRegular > 0 && p.priceOffer < p.priceRegular)
+        ? `<span class="absolute top-3 right-3 z-10 bg-red-600/90 text-white font-black text-[10px] px-2 py-0.5 rounded-md shadow-md uppercase tracking-wider">-${Math.round((1 - p.priceOffer / p.priceRegular) * 100)}%</span>`
+        : "";
+
       // Extracción de galería de fotos (soporta media.images, imágenes, imagenes, images, imageUrl)
       const prodImages = (p.media?.images && p.media.images.length > 0)
         ? p.media.images
@@ -1336,6 +1360,7 @@ const renderCatalog = (catalogData = null) => {
       return `
     <div class="relative bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col group transition-all duration-300 ${isAgotado ? 'opacity-60 grayscale' : ''}">
       ${scarcityBadgeHtml}
+      ${discountBadgeHtml}
       ${
         isAgotado
           ? `
@@ -1405,6 +1430,7 @@ const renderCatalog = (catalogData = null) => {
           `
           }
         </div>
+        <button type="button" data-action="ask-product" data-product-id="${p.id}" class="text-[10px] text-slate-400 hover:text-emerald-400 transition-colors mt-2 text-center block w-full">¿Dudas con la talla? Pregúntanos por WhatsApp</button>
       </div>
     </div>
   `;
@@ -1575,6 +1601,7 @@ const executeBuyNow = (productId) => {
   const checkoutModal = document.getElementById("modal-checkout");
   if (checkoutModal) {
     checkoutModal.classList.add("active");
+    if (typeof startCheckoutTimer === "function") startCheckoutTimer();
   }
 };
 window.executeBuyNow = executeBuyNow;
@@ -1679,6 +1706,65 @@ const applyCouponLogic = () => {
   }
 };
 
+// Temporizador de cuenta regresiva de 8 minutos para checkout
+let checkoutTimerInterval = null;
+let checkoutRemainingSeconds = 8 * 60;
+
+const startCheckoutTimer = () => {
+  const timerDisplay = document.getElementById("wz-timer-countdown");
+  if (!timerDisplay) return;
+
+  const updateDisplay = () => {
+    const minutes = Math.floor(checkoutRemainingSeconds / 60);
+    const seconds = checkoutRemainingSeconds % 60;
+    const el = document.getElementById("wz-timer-countdown");
+    if (el) {
+      el.textContent = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    }
+  };
+
+  updateDisplay();
+
+  if (!checkoutTimerInterval) {
+    checkoutTimerInterval = setInterval(() => {
+      checkoutRemainingSeconds--;
+      if (checkoutRemainingSeconds <= 0) {
+        // Reiniciar el reloj sin vaciar el carro para no frustrar la venta
+        checkoutRemainingSeconds = 8 * 60;
+      }
+      updateDisplay();
+    }, 1000);
+  }
+};
+window.startCheckoutTimer = startCheckoutTimer;
+
+// Observador para activar el temporizador automáticamente al desplegar modal-checkout
+if (typeof document !== "undefined") {
+  const initCheckoutObserver = () => {
+    const checkoutEl = document.getElementById("modal-checkout");
+    if (checkoutEl) {
+      const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+          if (mutation.type === "attributes" && mutation.attributeName === "class") {
+            if (checkoutEl.classList.contains("active")) {
+              startCheckoutTimer();
+            }
+          }
+        }
+      });
+      observer.observe(checkoutEl, { attributes: true });
+    }
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initCheckoutObserver);
+  } else {
+    initCheckoutObserver();
+  }
+}
+
+let previousTotalItems = 0;
+let isFirstCartRender = true;
+
 const updateCartUI = () => {
   const badge = document.getElementById("cart-badge");
   const cartItemsContainer = document.getElementById("cart-items");
@@ -1696,7 +1782,10 @@ const updateCartUI = () => {
           e.stopPropagation();
         }
         const checkoutModal = document.getElementById("modal-checkout");
-        if (checkoutModal) checkoutModal.classList.add("active");
+        if (checkoutModal) {
+          checkoutModal.classList.add("active");
+          startCheckoutTimer();
+        }
         if (typeof closeDrawer === "function") closeDrawer();
       };
     } else {
@@ -1720,6 +1809,8 @@ const updateCartUI = () => {
   cartItemsContainer.innerHTML = "";
 
   if (cart.length === 0) {
+    previousTotalItems = 0;
+    isFirstCartRender = false;
     badge.classList.add("hidden");
     cartItemsContainer.innerHTML =
       '<p class="text-gray-400 text-center mt-10">Tu carrito está vacío.</p>';
@@ -1792,6 +1883,20 @@ const updateCartUI = () => {
   });
 
   badge.textContent = totalItems;
+
+  if (!isFirstCartRender && totalItems > previousTotalItems) {
+    const cartBtn = document.getElementById("cart-btn");
+    if (cartBtn) {
+      cartBtn.classList.remove("cart-bounce");
+      void cartBtn.offsetWidth;
+      cartBtn.classList.add("cart-bounce");
+      setTimeout(() => {
+        cartBtn.classList.remove("cart-bounce");
+      }, 400);
+    }
+  }
+  previousTotalItems = totalItems;
+  isFirstCartRender = false;
 
   // Reglas matemáticas unificadas
   let discount = 0;
@@ -1979,6 +2084,7 @@ const recoverCartFromUrl = () => {
 
 // Validación integral de checkout y formateo de orden para WhatsApp
 const processCheckout = () => {
+  if (typeof startCheckoutTimer === "function") startCheckoutTimer();
   const orderId = `WZ-${Date.now().toString().slice(-6)}`;
   if (!cart || cart.length === 0) {
     showNotificationModal("Carro Vacío", "No tienes artículos agregados en la orden.");
@@ -2348,7 +2454,7 @@ window.calculateRecommendedSize = () => {
 // CANAL EXCLUSIVO DE ATENCIÓN Y SOPORTE (POSTVENTA)
 // ==========================================
 const WZ_SUPPORT_CONFIG = {
-  phone: "573159998877", // Canal exclusivo de asesoría postventa
+  phone: "573006724082", // Canal exclusivo de asesoría postventa
   agentName: "Equipo de Atención Técnica WZ"
 };
 

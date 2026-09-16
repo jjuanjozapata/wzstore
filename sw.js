@@ -1,5 +1,5 @@
 // Service Worker para soporte Offline y carga ultrarrápida Cache-First
-const CACHE_NAME = 'wzstore-cache-v6';
+const CACHE_NAME = 'wzstore-cache-v7';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -7,6 +7,7 @@ const ASSETS_TO_CACHE = [
   './politicas.html',
   './styles.css',
   './app.js',
+  './admin.js',
   './db.js',
   './favicon.svg',
   'https://cdn.tailwindcss.com',
@@ -53,7 +54,7 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
   const isLocalAsset = url.origin === self.location.origin &&
-    ['/app.js', '/styles.css', '/db.js'].some(path => url.pathname.endsWith(path));
+    ['/app.js', '/styles.css', '/db.js', '/admin.js'].some(path => url.pathname.endsWith(path));
 
   // Recursos locales críticos: Network-First con fallback a caché
   if (isLocalAsset) {

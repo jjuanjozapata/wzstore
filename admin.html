@@ -10,6 +10,15 @@
       content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://images.unsplash.com https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co; media-src 'self' data: blob: https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co; connect-src 'self' https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co wss://bthyaqpmvtyncnsbrouv.supabase.co wss://*.supabase.co;"
     />
     <title>WZSTORE | Back-Office Administrativo</title>
+    <script>
+      (function(){
+        const origWarn = console.warn;
+        console.warn = function(...args){
+          if(typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) return;
+          origWarn.apply(console, args);
+        };
+      })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {

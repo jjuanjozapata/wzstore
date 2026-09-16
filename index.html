@@ -48,6 +48,15 @@
     </script>
 
     <!-- Tailwind CDN & Styles con Failover de Red -->
+    <script>
+      (function(){
+        const origWarn = console.warn;
+        console.warn = function(...args){
+          if(typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com')) return;
+          origWarn.apply(console, args);
+        };
+      })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       // Detección y contingencia por caída o bloqueo de Tailwind CDN

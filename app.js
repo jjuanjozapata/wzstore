@@ -1,7 +1,7 @@
 // Configuración del cliente Supabase
 const SUPABASE_URL = "https://bthyaqpmvtyncnsbrouv.supabase.co";
 const SUPABASE_KEY = "sb_publishable_nsKtTkdnxMV2C0OUJbYhrw_xYR_7Am9";
-const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+const wzClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // Sanitización XSS Central
 // Sanitizador contra Vector XSS por codificación de entidades completas
@@ -220,9 +220,9 @@ const loadProducts = async () => {
   let loadedProducts = null;
 
   // 1. Consulta prioritaria a la tabla 'productos' de Supabase para catálogo fresco multi-dispositivo
-  if (supabase) {
+  if (wzClient) {
     try {
-      const { data, error } = await supabase.from('productos').select('*');
+      const { data, error } = await wzClient.from('productos').select('*');
       if (!error && Array.isArray(data) && data.length > 0) {
         loadedProducts = data.map((row) => {
           let parsedVariants = row.variants;
@@ -327,8 +327,8 @@ const initApp = async () => {
   updateCartUI();
 
   // Inicializar canal Realtime de Supabase para actualización reactiva del catálogo y hero
-  if (supabase && !productsRealtimeChannel) {
-    productsRealtimeChannel = supabase
+  if (wzClient && !productsRealtimeChannel) {
+    productsRealtimeChannel = wzClient
       .channel('public:productos')
       .on(
         'postgres_changes',

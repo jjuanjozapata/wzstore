@@ -6,7 +6,7 @@
 // Configuración del cliente Supabase
 const SUPABASE_URL = "https://bthyaqpmvtyncnsbrouv.supabase.co";
 const SUPABASE_KEY = "sb_publishable_nsKtTkdnxMV2C0OUJbYhrw_xYR_7Am9";
-const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+const wzClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 // Formateador estricto para sincronización con tabla 'productos' en Supabase (solo columnas de Postgres)
 const formatProductForSupabase = (prod) => {
@@ -153,7 +153,7 @@ async function checkAuth() {
   const overlay = document.getElementById("wz-login-overlay") || document.getElementById("login-modal");
   const dashboard = document.getElementById("admin-dashboard");
 
-  if (!supabase) {
+  if (!wzClient) {
     if (overlay) overlay.classList.remove("hidden");
     if (dashboard) dashboard.classList.add("hidden");
     return;
@@ -161,7 +161,7 @@ async function checkAuth() {
 
   if (!authListenerInitialized) {
     authListenerInitialized = true;
-    supabase.auth.onAuthStateChange((event, session) => {
+    wzClient.auth.onAuthStateChange((event, session) => {
       currentSession = session;
       if (!session) {
         if (overlay) overlay.classList.remove("hidden");
@@ -175,7 +175,7 @@ async function checkAuth() {
     });
   }
 
-  const { data: { session }, error } = await supabase.auth.getSession();
+  const { data: { session }, error } = await wzClient.auth.getSession();
   if (error || !session) {
     currentSession = null;
     if (overlay) overlay.classList.remove("hidden");
@@ -215,7 +215,7 @@ window.applyBulkPriceAdjustment = async (targetCategory, percentageChange) => {
   });
 
   saveProducts(products);
-  if (supabase) await supabase.from("productos").upsert(products.map(formatProductForSupabase));
+  if (wzClient) await wzClient.from("productos").upsert(products.map(formatProductForSupabase));
   renderInventoryTable();
   if (typeof recordAuditEvent === "function") {
     recordAuditEvent(`Ajuste masivo de precios: ${percentageChange}% en ${targetCategory} (${affectedCount} productos).`);
@@ -253,7 +253,7 @@ if (loginForm) {
       return;
     }
 
-    if (!supabase) {
+    if (!wzClient) {
       if (errorEl) {
         errorEl.textContent = "Error de conexión con el servicio de autenticación.";
         errorEl.classList.remove("hidden");
@@ -263,7 +263,7 @@ if (loginForm) {
     }
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await wzClient.auth.signInWithPassword({
         email: u,
         password: p,
       });
@@ -343,13 +343,13 @@ if (pwdForm) {
       return;
     }
 
-    if (!supabase) {
+    if (!wzClient) {
       showToast("Cliente de Supabase no disponible.", "error");
       return;
     }
 
     try {
-      const { data, error } = await supabase.auth.updateUser({ password: newPass });
+      const { data, error } = await wzClient.auth.updateUser({ password: newPass });
       if (error) {
         showToast(error.message || "Error al actualizar la contraseña.", "error");
         return;
@@ -367,9 +367,9 @@ const logoutBtn = document.getElementById("logout-btn");
 if (logoutBtn) {
   logoutBtn.addEventListener("click", async (e) => {
     if (e) e.preventDefault();
-    if (supabase) {
+    if (wzClient) {
       try {
-        await supabase.auth.signOut();
+        await wzClient.auth.signOut();
       } catch (err) {
         console.error("Error al cerrar sesión en Supabase:", err);
       }
@@ -753,9 +753,9 @@ window.confirmDelete = async function (id) {
     renderInventoryTable();
 
     // Sincronización directa con Supabase (eliminación)
-    if (supabase) {
+    if (wzClient) {
       try {
-        const { error } = await supabase.from('productos').delete().eq('id', id);
+        const { error } = await wzClient.from('productos').delete().eq('id', id);
         if (error) {
           console.error("Error al eliminar producto en Supabase:", error);
         }
@@ -829,8 +829,8 @@ function initRestockModal() {
       target.isAvailable = true;
       target.is_available = true;
       saveProducts(products);
-      if (supabase) {
-        supabase.from('productos').upsert(formatProductForSupabase(target)).catch((err) => console.error("Error en Supabase:", err));
+      if (wzClient) {
+        wzClient.from('productos').upsert(formatProductForSupabase(target)).catch((err) => console.error("Error en Supabase:", err));
       }
     }
 
@@ -858,8 +858,8 @@ function openRestockModal(target) {
       const idx = products.findIndex((p) => p.id === target.id);
       if (idx > -1) products[idx] = target;
       saveProducts(products);
-      if (supabase) {
-        supabase.from('productos').upsert(formatProductForSupabase(target)).catch((err) => console.error("Error en Supabase:", err));
+      if (wzClient) {
+        wzClient.from('productos').upsert(formatProductForSupabase(target)).catch((err) => console.error("Error en Supabase:", err));
       }
     }
     renderInventoryTable();
@@ -914,9 +914,9 @@ window.toggleProductStatus = async function(id) {
     renderInventoryTable();
 
     // Sincronización directa con Supabase
-    if (supabase) {
+    if (wzClient) {
       try {
-        const { error } = await supabase.from('productos').upsert(formatProductForSupabase(target));
+        const { error } = await wzClient.from('productos').upsert(formatProductForSupabase(target));
         if (error) console.error("Error al actualizar disponibilidad en Supabase:", error);
       } catch (err) {
         console.error("Fallo de conexión al actualizar en Supabase:", err);
@@ -1584,12 +1584,12 @@ form.addEventListener("submit", async (e) => {
   saveProducts(products);
 
   // Sincronización directa con la tabla 'productos' de Supabase (inserción y actualización)
-  if (supabase) {
+  if (wzClient) {
     try {
       if (isFeaturedTrend) {
-        if (supabase) await supabase.from("productos").update({ is_featured: false }).neq("id", resolvedTargetId);
+        if (wzClient) await wzClient.from("productos").update({ is_featured: false }).neq("id", resolvedTargetId);
       }
-      const { error } = await supabase.from('productos').upsert(formatProductForSupabase(productData));
+      const { error } = await wzClient.from('productos').upsert(formatProductForSupabase(productData));
       if (error) {
         console.error("Error al sincronizar prenda con Supabase:", error);
       }
@@ -1622,9 +1622,9 @@ form.addEventListener("submit", async (e) => {
 
 // Sincronización centralizada inicial desde la tabla 'productos' de Supabase
 async function fetchProductsFromSupabase() {
-  if (!supabase) return;
+  if (!wzClient) return;
   try {
-    const { data, error } = await supabase.from('productos').select('*');
+    const { data, error } = await wzClient.from('productos').select('*');
     if (!error && Array.isArray(data) && data.length > 0) {
       const mapped = data.map((row) => {
         let variants = row.variants;
@@ -1697,7 +1697,7 @@ window.importCatalogBackup = (event) => {
       if (!Array.isArray(importedData)) throw new Error("El archivo no contiene un catálogo válido.");
       
       saveProducts(importedData);
-      if (supabase) await supabase.from("productos").upsert(importedData.map(formatProductForSupabase));
+      if (wzClient) await wzClient.from("productos").upsert(importedData.map(formatProductForSupabase));
       renderInventoryTable();
       if (typeof recordAuditEvent === "function") recordAuditEvent("Restauración de catálogo desde archivo JSON");
       if (typeof showToast === "function") showToast("Catálogo restaurado exitosamente.");

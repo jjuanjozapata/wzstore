@@ -26,12 +26,19 @@ const sanitizeMediaUrl = (url) => {
   if (typeof url !== "string") return SAFE_MEDIA_FALLBACK;
   const trimmed = url.trim();
   if (!trimmed) return SAFE_MEDIA_FALLBACK;
+  let decoded = trimmed;
+  try {
+    decoded = decodeURIComponent(trimmed);
+  } catch (_) {
+    return SAFE_MEDIA_FALLBACK;
+  }
   if (
-    trimmed.includes('"') ||
-    trimmed.includes("'") ||
-    /javascript:/i.test(trimmed) ||
-    /data:image\/svg/i.test(trimmed) ||
-    /\\|%[0-9a-fA-F]{2}/i.test(trimmed)
+    decoded.includes('"') ||
+    decoded.includes("'") ||
+    decoded.includes("<") ||
+    decoded.includes(">") ||
+    /javascript:/i.test(decoded) ||
+    /data:image\/svg/i.test(trimmed)
   ) {
     return SAFE_MEDIA_FALLBACK;
   }
@@ -1151,8 +1158,6 @@ const checkAbandonedCartReminder = () => {
       );
       localStorage.setItem(REMINDER_SENT_KEY, "true");
     }, 1500);
-  } else {
-    localStorage.setItem(LAST_ACTIVITY_KEY, String(now));
   }
 };
 
@@ -1336,6 +1341,13 @@ window.selectHeroSize = (sizeIndex) => {
 const renderCatalog = (catalogData = null) => {
   const grid = document.getElementById("catalog-grid");
   if (!grid) return;
+
+  grid.querySelectorAll("video").forEach((video) => {
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    video.remove();
+  });
 
   const dataToRender = catalogData !== null ? catalogData : products;
 
@@ -1734,6 +1746,10 @@ const saveCart = () => {
     }));
 
     safeStorage.setItem("wz_cart", JSON.stringify(lightweightPayload));
+
+    if (cart && cart.length > 0) {
+      localStorage.setItem("wz_cart_last_activity", String(Date.now()));
+    }
   } catch (err) {
     console.error("Fallo al persistir carrito en almacenamiento local:", err);
     if (err.name === "QuotaExceededError" || err.code === 22) {
@@ -2404,6 +2420,8 @@ const processCheckout = () => {
   appliedCoupon = null;
   saveCart();
   updateCartUI();
+  localStorage.removeItem("wz_cart_last_activity");
+  localStorage.removeItem("wz_cart_reminder_sent");
 
   const checkoutModal = document.getElementById("modal-checkout");
   if (checkoutModal) {

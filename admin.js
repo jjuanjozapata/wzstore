@@ -319,9 +319,6 @@ if (loginForm) {
       const dashboard = document.getElementById("admin-dashboard");
       if (overlay) overlay.classList.add("hidden");
       if (dashboard) dashboard.classList.remove("hidden");
-
-      initDashboard();
-      if (typeof applyRolePermissions === "function") applyRolePermissions();
     } catch (err) {
       console.error("Error en validación de credenciales:", err);
       if (errorEl) {
@@ -440,7 +437,7 @@ if (workerForm) {
     const pwdInput = document.getElementById("wz-worker-pwd");
     const submitBtn = document.getElementById("wz-submit-worker-btn") || workerForm.querySelector('button[type="submit"]');
 
-    const email = emailInput ? emailInput.value.trim() : "";
+    const email = emailInput ? emailInput.value.trim().toLowerCase() : "";
     const password = pwdInput ? pwdInput.value.trim() : "";
 
     if (password.length < 8) {
@@ -872,8 +869,8 @@ function renderInventoryTable() {
 
           <div class="flex items-center justify-between bg-dark/60 p-3 rounded-xl border border-gray-800/80 w-full">
             <div class="flex items-center gap-3">
-              <label class="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" data-action="toggle-status" data-id="${safeId}" class="sr-only peer" ${isAvailable ? "checked" : ""}>
+              <label data-action="toggle-status" data-id="${safeId}" class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" class="sr-only peer" ${isAvailable ? "checked" : ""}>
                 <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-neon"></div>
               </label>
               <span class="text-xs font-semibold text-gray-300">Disponibilidad</span>
@@ -939,6 +936,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const toggleStatusEl = e.target.closest('[data-action="toggle-status"]');
       if (toggleStatusEl) {
+        if (e.target.tagName === "INPUT") return;
         const prodId = toggleStatusEl.dataset.id;
         if (prodId && typeof window.toggleProductStatus === "function") {
           window.toggleProductStatus(prodId);
@@ -1906,7 +1904,12 @@ async function fetchProductsFromSupabase() {
   if (!wzClient) return;
   try {
     const { data, error } = await wzClient.from('productos').select('*');
-    if (!error && Array.isArray(data) && data.length > 0) {
+    if (!error && Array.isArray(data)) {
+      if (data.length === 0) {
+        saveProducts([]);
+        renderInventoryTable();
+        return;
+      }
       const mapped = data.map((row) => {
         let variants = row.variants;
         if (typeof variants === "string") {

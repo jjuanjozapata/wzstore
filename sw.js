@@ -1,5 +1,5 @@
 // Service Worker para soporte Offline y carga ultrarrápida Cache-First
-const CACHE_NAME = 'wzstore-cache-v8';
+const CACHE_NAME = 'wzstore-cache-v9';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -51,7 +51,15 @@ self.addEventListener('fetch', (event) => {
   // Solicitudes de navegación: Network-First con fallback offline
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => {
+      fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
+        return networkResponse;
+      }).catch(() => {
         return caches.match(event.request).then((cachedResponse) => {
           return cachedResponse || caches.match('./index.html');
         });

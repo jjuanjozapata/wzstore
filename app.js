@@ -1156,9 +1156,11 @@ const checkAbandonedCartReminder = () => {
   if (!alreadyNotified && now - lastActive > TWELVE_HOURS) {
     setTimeout(() => {
       // Pre-aplicar cupón de recuperación
-      appliedCoupon = "WZRECUPERA10";
-      const couponInput = document.getElementById("coupon-input");
-      if (couponInput) couponInput.value = "WZRECUPERA10";
+      if (appliedCoupon !== "WZ2026") {
+        appliedCoupon = "WZRECUPERA10";
+        const couponInput = document.getElementById("coupon-input");
+        if (couponInput) couponInput.value = "WZRECUPERA10";
+      }
       
       updateCartUI();
       showNotificationModal(
@@ -1181,7 +1183,7 @@ const setupEventListeners = () => {
       clearTimeout(debounceTimer);
       const query = e.target.value;
       debounceTimer = setTimeout(() => {
-        currentFilter.text = sanitizeInput(query.trim().toLowerCase());
+        currentFilter.text = query.trim().toLowerCase();
         executeMasterFilters();
       }, 300);
     });
@@ -1311,6 +1313,8 @@ const renderFeaturedHero = () => {
   } else {
     if (videoEl) {
       videoEl.pause();
+      videoEl.removeAttribute("src");
+      videoEl.load();
       videoEl.removeAttribute("data-src");
       videoEl.classList.add("hidden");
     }
@@ -1425,7 +1429,7 @@ const renderCatalog = (catalogData = null) => {
           else
             classes +=
               "border-slate-700 text-slate-300 hover:border-slate-400 ";
-          return `<button ${isDisabled ? "disabled" : ""} data-action="select-size" data-product-id="${p.id}" data-size-index="${idx}" class="${classes}">${s.size}${lowStockBadge}</button>`;
+          return `<button ${isDisabled ? "disabled" : ""} data-action="select-size" data-product-id="${p.id}" data-size-index="${idx}" class="${classes}">${sanitizeInput(s.size)}${lowStockBadge}</button>`;
         })
         .join("");
 

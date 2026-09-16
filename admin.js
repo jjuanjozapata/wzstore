@@ -218,6 +218,7 @@ async function checkAuth() {
 
 // 10. Actualización Masiva de Precios por Categoría
 window.applyBulkPriceAdjustment = async (targetCategory, percentageChange) => {
+  if (getCurrentSession()?.role !== 'admin') { showToast('Acceso denegado: Se requiere rol de administrador.', 'error'); return; }
   const factor = 1 + (Number(percentageChange) / 100);
   if (isNaN(factor) || factor <= 0) {
     if (typeof showToast === "function") showToast("Porcentaje de ajuste inválido.", "error");
@@ -1234,13 +1235,23 @@ const compressImage = (file) => {
 const renderMediaPreviews = () => {
   const container = document.getElementById("wz-media-preview");
   if (!container) return;
+  if (!container.dataset.listenerAttached) {
+    container.dataset.listenerAttached = "true";
+    container.addEventListener("click", (e) => {
+      const btn = e.target.closest('[data-action="remove-media"]');
+      if (!btn) return;
+      const type = btn.dataset.type;
+      const index = btn.dataset.index !== undefined && btn.dataset.index !== "" ? Number(btn.dataset.index) : null;
+      removeBufferedMedia(type, index);
+    });
+  }
   container.innerHTML = "";
 
   mediaBuffer.images.forEach((imgBase64, idx) => {
     container.innerHTML += `
       <div class="relative group rounded-lg overflow-hidden border border-slate-700 h-16 bg-slate-950">
         <img src="${imgBase64}" class="w-full h-full object-cover">
-        <button type="button" onclick="removeBufferedMedia('image', ${idx})" class="absolute inset-0 bg-red-950/80 text-white text-[10px] font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">Eliminar</button>
+        <button type="button" data-action="remove-media" data-type="image" data-index="${idx}" class="absolute inset-0 bg-red-950/80 text-white text-[10px] font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">Eliminar</button>
       </div>
     `;
   });
@@ -1249,7 +1260,7 @@ const renderMediaPreviews = () => {
     container.innerHTML += `
       <div class="relative group rounded-lg overflow-hidden border border-slate-700 h-16 bg-slate-950 flex items-center justify-center p-1 text-center">
         <span class="text-[10px] font-bold text-emerald-400 truncate max-w-full">VIDEO OK</span>
-        <button type="button" onclick="removeBufferedMedia('video')" class="absolute inset-0 bg-red-950/80 text-white text-[10px] font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">Eliminar</button>
+        <button type="button" data-action="remove-media" data-type="video" class="absolute inset-0 bg-red-950/80 text-white text-[10px] font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">Eliminar</button>
       </div>
     `;
   }
@@ -1264,6 +1275,18 @@ window.removeBufferedMedia = (type, index = null) => {
   }
   renderMediaPreviews();
 };
+
+const mediaPreviewContainer = document.getElementById("wz-media-preview");
+if (mediaPreviewContainer && !mediaPreviewContainer.dataset.listenerAttached) {
+  mediaPreviewContainer.dataset.listenerAttached = "true";
+  mediaPreviewContainer.addEventListener("click", (e) => {
+    const btn = e.target.closest('[data-action="remove-media"]');
+    if (!btn) return;
+    const type = btn.dataset.type;
+    const index = btn.dataset.index !== undefined && btn.dataset.index !== "" ? Number(btn.dataset.index) : null;
+    removeBufferedMedia(type, index);
+  });
+}
 
 // Control de arrastrar, soltar y selección
 const initMediaDropZone = () => {
@@ -1527,6 +1550,18 @@ function renderVariantsList() {
   const list = document.getElementById("variants-list");
   if (!list) return;
 
+  if (!list.dataset.listenerAttached) {
+    list.dataset.listenerAttached = "true";
+    list.addEventListener("click", (e) => {
+      const btn = e.target.closest('[data-action="remove-variant"]');
+      if (!btn) return;
+      const idx = Number(btn.dataset.index);
+      if (!isNaN(idx)) {
+        removeTempVariant(idx);
+      }
+    });
+  }
+
   if (tempVariants.length === 0) {
     list.innerHTML = `
       <p class="text-gray-500 text-sm text-center py-3 bg-dark/40 rounded-xl border border-gray-800/60" id="empty-variants-msg">
@@ -1540,10 +1575,11 @@ function renderVariantsList() {
   tempVariants.forEach((v, idx) => {
     const safeSize = sanitizeInput(v.size);
     const safeColor = sanitizeInput(v.color);
+    const safeColorHex = (typeof v.colorHex === "string" && /^#[0-9A-Fa-f]{3,8}$/.test(v.colorHex)) ? v.colorHex : '#10b981';
     html += `
       <div class="flex items-center justify-between bg-slate-900 border border-slate-700 p-3 rounded-xl text-xs font-semibold text-white shadow-sm hover:border-emerald-500/50 transition-all w-full">
         <div class="flex items-center gap-2.5">
-          <span class="w-3 h-3 rounded-full shrink-0" style="background-color: ${v.colorHex || '#10b981'}"></span>
+          <span class="w-3 h-3 rounded-full shrink-0" style="background-color: ${safeColorHex}"></span>
           <div>
             <span class="text-white font-bold text-sm">Talla ${safeSize}</span>
             <span class="text-gray-400 font-normal ml-1.5">(${safeColor && safeColor !== "Único" ? safeColor : "Color único"})</span>
@@ -1553,7 +1589,8 @@ function renderVariantsList() {
           <span class="bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800 text-emerald-400 font-mono font-bold">${v.stock} unds</span>
           <button
             type="button"
-            onclick="removeTempVariant(${idx})"
+            data-action="remove-variant"
+            data-index="${idx}"
             class="text-red-400 hover:text-white hover:bg-red-600/80 rounded-lg p-2 transition-colors cursor-pointer flex items-center justify-center text-sm font-bold"
             title="Remover variante"
           >
@@ -1578,6 +1615,19 @@ window.removeVariantColor = function (idx) {
   syncTempFromCurrentVariants();
   renderVariantsList();
 };
+
+const variantsListContainer = document.getElementById("variants-list");
+if (variantsListContainer && !variantsListContainer.dataset.listenerAttached) {
+  variantsListContainer.dataset.listenerAttached = "true";
+  variantsListContainer.addEventListener("click", (e) => {
+    const btn = e.target.closest('[data-action="remove-variant"]');
+    if (!btn) return;
+    const idx = Number(btn.dataset.index);
+    if (!isNaN(idx)) {
+      removeTempVariant(idx);
+    }
+  });
+}
 
 const addVariantBtn = document.getElementById("add-variant-btn");
 if (addVariantBtn) {
@@ -1987,10 +2037,20 @@ window.exportCatalogBackup = () => {
   if (typeof showToast === "function") showToast("Catálogo descargado exitosamente en db.json");
 };
 
-const btnExportDb = document.getElementById("btn-export-db");
-if (btnExportDb) {
-  btnExportDb.addEventListener("click", window.exportCatalogBackup);
-}
+document.addEventListener("DOMContentLoaded", () => {
+  const btnExportDb = document.getElementById("btn-export-db");
+  if (btnExportDb) {
+    btnExportDb.addEventListener("click", window.exportCatalogBackup);
+  }
+
+  const btnRestoreDb = document.getElementById("btn-restore-db") || (btnExportDb && btnExportDb.nextElementSibling);
+  if (btnRestoreDb) {
+    btnRestoreDb.addEventListener("click", () => {
+      const restoreInput = document.getElementById("wz-restore-input");
+      if (restoreInput) restoreInput.click();
+    });
+  }
+});
 
 // Sanitización recursiva contra Prototype Pollution
 const sanitizeAgainstPrototypePollution = (item) => {

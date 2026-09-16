@@ -92,17 +92,20 @@
    <!-- MARCADO ESTRUCTURADO DINÁMICO JSON-LD PARA GOOGLE (ORGANIZATION & LOGO RICH RESULTS) -->
     <script id="wz-schema-injector">
       document.addEventListener('DOMContentLoaded', () => {
-        const rawData = localStorage.getItem('wz_core_products') || localStorage.getItem('wz_products');
         let catalog = [];
         try {
-          catalog = rawData ? JSON.parse(rawData) : [];
+          const rawData = localStorage.getItem('wz_core_products') || localStorage.getItem('wz_products');
+          if (rawData) {
+            const parsed = JSON.parse(rawData);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              catalog = parsed;
+            }
+          }
         } catch (e) {
           catalog = [];
         }
-        if (!Array.isArray(catalog) || catalog.length === 0) {
-          if (typeof INITIAL_DATABASE !== 'undefined' && Array.isArray(INITIAL_DATABASE)) {
-            catalog = INITIAL_DATABASE;
-          }
+        if ((!Array.isArray(catalog) || catalog.length === 0) && typeof INITIAL_DATABASE !== 'undefined' && Array.isArray(INITIAL_DATABASE)) {
+          catalog = INITIAL_DATABASE;
         }
 
         const siteUrl = "https://jjuanjozapata.github.io/wzstore";
@@ -149,13 +152,21 @@
               "name": item.name,
               "description": item.description,
               "image": item.imageUrl || (item.media?.images && item.media.images[0]) || logoAbsoluteUrl,
+              "brand": {
+                "@type": "Brand",
+                "name": "WZSTORE"
+              },
               "offers": {
                 "@type": "Offer",
                 "priceCurrency": "COP",
                 "price": item.isOffer ? item.priceOffer : item.priceRegular,
                 "availability": (item.status === "agotado" || item.isAvailable === false)
                   ? "https://schema.org/OutOfStock"
-                  : "https://schema.org/InStock"
+                  : "https://schema.org/InStock",
+                "seller": {
+                  "@type": "Organization",
+                  "name": "WZSTORE"
+                }
               }
             }))
           ]
@@ -177,7 +188,6 @@
           type="button"
           id="wz-store-modal-close"
           data-action="close-store-modal"
-          onclick="closeStoreModal()"
           class="absolute top-4 right-4 text-slate-400 hover:text-white text-xl font-bold w-8 h-8 rounded-full hover:bg-slate-800 flex items-center justify-center transition-colors"
           aria-label="Cerrar modal"
         >
@@ -191,7 +201,6 @@
         <button
           type="button"
           data-action="close-store-modal"
-          onclick="closeStoreModal()"
           class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
         >
           Entendido
@@ -327,7 +336,6 @@
           <button
             data-action="filter-category"
             data-category="all"
-            onclick="handleParentCategory('all')"
             class="cat-pill bg-emerald-500 text-black px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all"
           >
             Todos
@@ -335,7 +343,6 @@
           <button
             data-action="filter-category"
             data-category="Bermudas"
-            onclick="handleParentCategory('Bermudas')"
             class="cat-pill bg-slate-800 text-slate-300 hover:text-white px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all"
           >
             Bermudas
@@ -343,7 +350,6 @@
           <button
             data-action="filter-category"
             data-category="Busos"
-            onclick="handleParentCategory('Busos')"
             class="cat-pill bg-slate-800 text-slate-300 hover:text-white px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all"
           >
             Busos
@@ -351,7 +357,6 @@
           <button
             data-action="filter-category"
             data-category="Camisetas"
-            onclick="handleParentCategory('Camisetas')"
             class="cat-pill bg-slate-800 text-slate-300 hover:text-white px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all"
           >
             Camisetas
@@ -359,7 +364,6 @@
           <button
             data-action="filter-category"
             data-category="Licras"
-            onclick="handleParentCategory('Licras')"
             class="cat-pill bg-slate-800 text-slate-300 hover:text-white px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all"
           >
             Licras
@@ -367,7 +371,6 @@
           <button
             data-action="filter-category"
             data-category="Conjuntos"
-            onclick="handleParentCategory('Conjuntos')"
             class="cat-pill bg-slate-800 text-slate-300 hover:text-white px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all"
           >
             Conjuntos
@@ -375,7 +378,6 @@
           <button
             data-action="filter-category"
             data-category="Accesorios"
-            onclick="handleParentCategory('Accesorios')"
             class="cat-pill bg-slate-800 text-slate-300 hover:text-white px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all"
           >
             Accesorios
@@ -393,7 +395,6 @@
             id="gender-btn-todas"
             data-action="filter-gender"
             data-gender="todas"
-            onclick="applyGenderFilter('todas')"
             class="gender-pill px-3 py-1 rounded-lg text-xs font-bold bg-emerald-500 text-black transition-colors"
           >
             Todas
@@ -403,7 +404,6 @@
             id="gender-btn-hombre"
             data-action="filter-gender"
             data-gender="hombre"
-            onclick="applyGenderFilter('hombre')"
             class="gender-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
           >
             Hombre
@@ -413,7 +413,6 @@
             id="gender-btn-mujer"
             data-action="filter-gender"
             data-gender="mujer"
-            onclick="applyGenderFilter('mujer')"
             class="gender-pill px-3 py-1 rounded-lg text-xs font-semibold bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
           >
             Mujer
@@ -427,7 +426,7 @@
       <div class="flex gap-2 justify-center items-center">
         <input type="number" id="wz-calc-height" placeholder="Estatura (cm)" class="w-32 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-base sm:text-sm text-white text-center focus:border-emerald-500 outline-none">
         <input type="number" id="wz-calc-weight" placeholder="Peso (kg)" class="w-32 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-base sm:text-sm text-white text-center focus:border-emerald-500 outline-none">
-        <button data-action="calc-size" onclick="calculateRecommendedSize()" class="bg-emerald-500 text-black font-bold text-xs px-3 py-1 rounded hover:bg-emerald-400 transition-colors">Calcular</button>
+        <button data-action="calc-size" class="bg-emerald-500 text-black font-bold text-xs px-3 py-1 rounded hover:bg-emerald-400 transition-colors">Calcular</button>
       </div>
       <p id="wz-size-result" class="text-xs text-slate-300 mt-2 font-medium hidden"></p>
     </div>
@@ -487,10 +486,10 @@
           <p
             class="text-sm text-gray-400 mt-3 leading-relaxed border-t border-[#1e293b] pt-3"
           >
-            Sí. Puedes solicitar cambios o devoluciones dentro de los 30 días
-            posteriores a tu compra, ya sea por talla o garantía. Es importante
-            conservar la factura enviada con tu pedido. Para gestionar el
-            proceso, contáctanos a través de nuestra línea de WhatsApp.
+            Sí. Puedes solicitar cambios o devoluciones dentro de los 20 días
+            calendario a partir de la entrega, ya sea por talla o garantía. Es
+            importante conservar la factura enviada con tu pedido. Para gestionar
+            el proceso, contáctanos a través de nuestra línea de WhatsApp.
           </p>
         </details>
 
@@ -840,7 +839,6 @@
     <button
       id="wz-support-btn"
       type="button"
-      onclick="openSupportChat()"
       class="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-4 py-3 rounded-full shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-transform duration-200 hover:scale-105 active:scale-95 font-bold text-xs uppercase tracking-wider cursor-pointer border border-emerald-400/50"
       title="Atención al Cliente WZSTORE"
       aria-label="Abrir chat de soporte"
@@ -854,7 +852,7 @@
     <!-- BARRA FLOTANTE STICKY DE COMPRA RÁPIDA PARA MÓVILES -->
     <div
       id="wz-sticky-bar"
-      class="fixed bottom-0 left-0 right-0 z-40 bg-[#0c121e]/95 backdrop-blur-lg border-t border-slate-800 px-4 pt-3 pb-4 sm:hidden transform translate-y-full transition-transform duration-300 flex items-center justify-between gap-3 shadow-2xl"
+      class="fixed bottom-0 left-0 right-0 z-40 bg-[#0c121e]/95 backdrop-blur-lg border-t border-slate-800 px-4 pt-3 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] sm:hidden transform translate-y-full transition-transform duration-300 flex items-center justify-between gap-3 shadow-2xl"
     >
       <div class="flex-1 min-w-0">
         <p id="wz-sticky-title" class="text-xs font-bold text-white truncate">WZSTORE Oficial</p>
@@ -864,7 +862,6 @@
         type="button"
         id="wz-sticky-cta"
         data-action="open-cart"
-        onclick="openDrawer()"
         class="shrink-0 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-black text-[11px] uppercase tracking-wider px-4 py-2.5 rounded-lg transition-transform flex items-center gap-1.5 shadow-md shadow-emerald-500/20"
       >
         <svg class="w-4 h-4 fill-current" viewBox="0 0 20 20">
@@ -886,5 +883,8 @@
         });
       }
     </script>
+
+    <div id="wz-social-toast" class="fixed bottom-24 left-4 z-40 max-w-xs bg-[#111726]/95 border border-slate-800 p-3 rounded-xl shadow-2xl backdrop-blur-md transform -translate-x-full opacity-0 transition-all duration-500 pointer-events-none flex items-center gap-3"></div>
   </body>
 </html>
+

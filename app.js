@@ -343,6 +343,69 @@ const initApp = async () => {
           } else if (typeof renderCatalog === "function") {
             renderCatalog();
           }
+
+          // Rutina de reconciliación de inventario en carrito activo
+          if (Array.isArray(cart) && cart.length > 0) {
+            let cartModified = false;
+            const updatedCart = [];
+
+            for (const item of cart) {
+              const p = products.find((prod) => String(prod.id) === String(item.id));
+              const isProductOutOfStock = !p || p.status === "agotado" || p.isAvailable === false || p.is_available === false;
+
+              if (isProductOutOfStock) {
+                cartModified = true;
+                continue;
+              }
+
+              let variants = p.variants;
+              if (typeof variants === "string") {
+                try {
+                  variants = JSON.parse(variants);
+                } catch (e) {
+                  variants = [];
+                }
+              }
+              const variantsList = Array.isArray(variants) ? variants : [];
+              const cleanColor = String(item.color || "").trim().toLowerCase();
+              const matchedVariant = variantsList.find(
+                (v) => v.color && v.color.trim().toLowerCase() === cleanColor
+              ) || variantsList[0];
+
+              const cleanSize = String(item.size || "").trim().toUpperCase();
+              const matchedSizeObj = matchedVariant?.sizes?.find(
+                (s) => String(s.size || "").trim().toUpperCase() === cleanSize
+              );
+
+              let availableStock = matchedSizeObj ? Number(matchedSizeObj.stock) || 0 : 0;
+              if (!matchedSizeObj && typeof p.stock === "number") {
+                availableStock = p.stock;
+              }
+
+              if (availableStock <= 0) {
+                cartModified = true;
+              } else if (item.qty > availableStock) {
+                item.qty = availableStock;
+                item.maxStock = availableStock;
+                updatedCart.push(item);
+                cartModified = true;
+              } else {
+                item.maxStock = availableStock;
+                updatedCart.push(item);
+              }
+            }
+
+            if (cartModified) {
+              cart = updatedCart;
+              saveCart();
+              updateCartUI();
+              if (typeof showStoreModal === "function") {
+                showStoreModal("Actualizamos tu carrito debido a cambios recientes de inventario.", "Inventario Actualizado");
+              } else if (typeof window.showStoreModal === "function") {
+                window.showStoreModal("Actualizamos tu carrito debido a cambios recientes de inventario.", "Inventario Actualizado");
+              }
+            }
+          }
         }
       )
       .subscribe();
@@ -578,6 +641,56 @@ document.addEventListener("click", (e) => {
     return;
   }
 
+  // 1.1 Compra directa (Comprar Ya)
+  const buyNowBtn = target.closest("[data-action='buy-now']");
+  if (buyNowBtn) {
+    e.preventDefault();
+    const pId = buyNowBtn.dataset.productId;
+    const p = products.find((x) => String(x.id) === String(pId));
+    if (!p) return;
+
+    const state = uiState[p.id];
+    if (!state || state.sizeIdx === null || state.sizeIdx === undefined) {
+      window.showStoreModal("Por favor elige una talla disponible antes de realizar la compra.", "Selecciona una Talla");
+      return;
+    }
+
+    if (navigator.vibrate) navigator.vibrate(15);
+
+    const variant = p.variants?.[state.colorIdx || 0] || p.variants?.[0];
+    const sizeObj = variant?.sizes?.[state.sizeIdx];
+    if (!sizeObj || sizeObj.stock <= 0) {
+      window.showStoreModal("Esta talla no se encuentra disponible actualmente.", "Talla Agotada");
+      return;
+    }
+
+    const finalPrice = p.isOffer ? p.priceOffer : p.priceRegular;
+
+    // Limpia el carrito cart y añade esa única prenda
+    cart = [{
+      id: p.id,
+      name: p.name,
+      color: variant.color || "",
+      size: sizeObj.size,
+      price: finalPrice,
+      priceRegular: p.priceRegular,
+      qty: 1,
+      maxStock: sizeObj.stock,
+      img: p.imageUrl || (p.media?.images && p.media.images[0]) || "",
+    }];
+
+    saveCart();
+    updateCartUI();
+    if (typeof closeDrawer === "function") closeDrawer();
+    else if (typeof window.closeDrawer === "function") window.closeDrawer();
+
+    const checkoutModal = document.getElementById("modal-checkout");
+    if (checkoutModal) {
+      checkoutModal.classList.add("active");
+    }
+    return;
+  }
+
   // 2. Botón de compra en Hero Showcase
   const heroBuyBtn = target.closest("#wz-hero-buy-btn, [data-action='hero-buy']");
   if (heroBuyBtn) {
@@ -634,6 +747,7 @@ document.addEventListener("click", (e) => {
   const increaseBtn = target.closest("[data-action='cart-increase']");
   if (increaseBtn) {
     e.preventDefault();
+    if (navigator.vibrate) navigator.vibrate(15);
     const idx = parseInt(increaseBtn.dataset.index, 10);
     if (!isNaN(idx) && cart[idx]) {
       const item = cart[idx];
@@ -653,6 +767,7 @@ document.addEventListener("click", (e) => {
   const decreaseBtn = target.closest("[data-action='cart-decrease']");
   if (decreaseBtn) {
     e.preventDefault();
+    if (navigator.vibrate) navigator.vibrate(15);
     const idx = parseInt(decreaseBtn.dataset.index, 10);
     if (!isNaN(idx) && cart[idx]) {
       const item = cart[idx];
@@ -800,6 +915,89 @@ document.addEventListener("click", (e) => {
   }
 });
 
+// Motor de Prueba Social en Tiempo Real (Social Proof Engine)
+const initSocialProofEngine = () => {
+  const toast = document.getElementById("wz-social-toast");
+  if (!toast) return;
+
+  const cities = [
+    "Bogotá",
+    "Medellín",
+    "Cali",
+    "Barranquilla",
+    "Bucaramanga",
+    "Pereira",
+    "Cartagena",
+    "Cúcuta"
+  ];
+
+  const triggerToast = () => {
+    // Filtrar catálogo activo (productos no agotados y disponibles para venta)
+    const activeProducts = (Array.isArray(products) && products.length > 0)
+      ? products.filter((p) => {
+          if (p.status === "agotado" || p.isAvailable === false || p.is_available === false) return false;
+          let stock = 0;
+          p.variants?.forEach((v) => {
+            v.sizes?.forEach((s) => (stock += Number(s.stock) || 0));
+          });
+          return stock > 0 || typeof p.stock !== "undefined";
+        })
+      : [];
+
+    const availablePool = activeProducts.length > 0 ? activeProducts : (Array.isArray(products) ? products : []);
+    if (availablePool.length === 0) return;
+
+    const randomProduct = availablePool[Math.floor(Math.random() * availablePool.length)];
+    const randomCity = cities[Math.floor(Math.random() * cities.length)];
+
+    const prodImages = (randomProduct.media?.images && randomProduct.media.images.length > 0)
+      ? randomProduct.media.images
+      : (Array.isArray(randomProduct.imagenes) && randomProduct.imagenes.length > 0
+          ? randomProduct.imagenes
+          : (Array.isArray(randomProduct.images) && randomProduct.images.length > 0
+              ? randomProduct.images
+              : (randomProduct.imageUrl ? [randomProduct.imageUrl] : [])));
+    const prodImg = prodImages[0] || randomProduct.imageUrl || '';
+
+    const imgHtml = prodImg
+      ? `<img src="${prodImg}" alt="${sanitizeInput(randomProduct.name)}" class="w-10 h-10 rounded-lg object-cover border border-slate-700 shrink-0" onerror="this.style.display='none'">`
+      : `<div class="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shrink-0 text-emerald-400 font-black text-xs">WZ</div>`;
+
+    toast.innerHTML = `
+      ${imgHtml}
+      <div class="text-xs leading-snug">
+        <p class="text-slate-200 font-medium">Alguien en <span class="font-bold text-white">${randomCity}</span> acaba de ordenar <span class="font-bold text-emerald-400">${sanitizeInput(randomProduct.name)}</span></p>
+        <span class="text-[10px] text-slate-400 block mt-0.5">Hace un momento • Compra verificada</span>
+      </div>
+    `;
+
+    // Deslizar toast a la vista
+    toast.classList.remove("-translate-x-full", "opacity-0");
+    toast.classList.add("translate-x-0", "opacity-100");
+
+    // Ocultar tras 4.5 segundos
+    setTimeout(() => {
+      toast.classList.remove("translate-x-0", "opacity-100");
+      toast.classList.add("-translate-x-full", "opacity-0");
+    }, 4500);
+  };
+
+  // Disparar primer aviso inmediatamente al arrancar
+  triggerToast();
+
+  // Programar repetición aleatoria cada 25 a 35 segundos
+  const scheduleNext = () => {
+    const randomDelay = Math.floor(Math.random() * (35000 - 25000 + 1)) + 25000;
+    setTimeout(() => {
+      triggerToast();
+      scheduleNext();
+    }, randomDelay);
+  };
+
+  scheduleNext();
+};
+window.initSocialProofEngine = initSocialProofEngine;
+
 // Arrancar al cargar la vista con soporte Sticky Mobile y Media Observers
 document.addEventListener("DOMContentLoaded", async () => {
   await initApp();
@@ -833,6 +1031,11 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     }, { passive: true });
   }
+
+  // Motor de prueba social en tiempo real iniciado 4 segundos después de DOMContentLoaded
+  setTimeout(() => {
+    initSocialProofEngine();
+  }, 4000);
 });
 
 // Detector pasivo de carritos abandonados con cupón de incentivo
@@ -1046,6 +1249,10 @@ const renderCatalog = (catalogData = null) => {
         .map((s, idx) => {
           const isDisabled = isAgotado || s.stock === 0;
           const isSelected = state?.sizeIdx === idx;
+          const stockVal = Number(s.stock);
+          const lowStockBadge = (!isDisabled && stockVal >= 1 && stockVal <= 2)
+            ? '<span class="text-[9px] text-amber-400 font-bold block leading-none mt-0.5">¡Últimas!</span>'
+            : '';
           let classes = "px-2 py-1 text-xs border rounded ";
           if (isDisabled)
             classes +=
@@ -1056,7 +1263,7 @@ const renderCatalog = (catalogData = null) => {
           else
             classes +=
               "border-slate-700 text-slate-300 hover:border-slate-400 ";
-          return `<button ${isDisabled ? "disabled" : ""} data-action="select-size" data-product-id="${p.id}" data-size-index="${idx}" class="${classes}">${s.size}</button>`;
+          return `<button ${isDisabled ? "disabled" : ""} data-action="select-size" data-product-id="${p.id}" data-size-index="${idx}" class="${classes}">${s.size}${lowStockBadge}</button>`;
         })
         .join("");
 
@@ -1155,12 +1362,15 @@ const renderCatalog = (catalogData = null) => {
           ${
             !isAgotado
               ? `
-            <button data-action="add-to-cart" data-product-id="${p.id}" class="shrink-0 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-black text-xs px-3.5 py-2.5 rounded-lg transition-all shadow-md shadow-emerald-500/20 uppercase tracking-wider flex items-center gap-1.5" aria-label="Añadir al Carro">
-              <svg class="w-4 h-4 fill-current" viewBox="0 0 20 20">
-                <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
-              </svg>
-              <span>Añadir</span>
-            </button>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button data-action="buy-now" data-product-id="${p.id}" class="btn-flash-buy bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-xs px-2.5 py-2 rounded-lg font-bold uppercase transition-all active:scale-95" title="Comprar ahora">Comprar Ya</button>
+              <button data-action="add-to-cart" data-product-id="${p.id}" class="shrink-0 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-black text-xs px-3.5 py-2.5 rounded-lg transition-all shadow-md shadow-emerald-500/20 uppercase tracking-wider flex items-center gap-1.5" aria-label="Añadir al Carro">
+                <svg class="w-4 h-4 fill-current" viewBox="0 0 20 20">
+                  <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
+                </svg>
+                <span>Añadir</span>
+              </button>
+            </div>
           `
               : `
             <button disabled class="shrink-0 bg-slate-800 text-slate-500 font-bold px-3 py-2 rounded-lg text-xs uppercase tracking-wider cursor-not-allowed pointer-events-none">Agotado</button>
@@ -1185,6 +1395,7 @@ window.selectColor = (productId, colorIdx) => {
 };
 
 window.selectSize = (productId, sizeIdx) => {
+  if (navigator.vibrate) navigator.vibrate(15);
   uiState[productId].sizeIdx = sizeIdx;
   renderCatalog();
 };
@@ -1273,6 +1484,7 @@ const applyCouponLogic = () => {
     document.getElementById("coupon-input").value.toUpperCase(),
   );
   if (code === "WZ2026" || code === "FREEATHLETE" || code === "WZRECUPERA10") {
+    if (navigator.vibrate) navigator.vibrate(15);
     appliedCoupon = code;
     updateCartUI();
     showNotificationModal("Cupón Aplicado", `Se activó el beneficio del cupón: ${code}`);
@@ -1439,6 +1651,8 @@ const closeDrawer = () => {
   document.getElementById("drawer-cart").classList.remove("open");
   document.getElementById("drawer-overlay").classList.remove("open");
 };
+window.openDrawer = openDrawer;
+window.closeDrawer = closeDrawer;
 
 // Generación y copia del enlace Base64 del carrito
 const shareCartUrl = async () => {
@@ -1721,7 +1935,7 @@ const processCheckout = () => {
   });
 
   // Cálculo del ahorro total del cliente y aplicación de la línea psicológica obligatoria
-  const verifiedSavings = (totalRegularCanon + (SHIP_RATES[shippingType] || 5000) + codSurcharge) - mathematicallyVerifiedTotal;
+  const verifiedSavings = (totalRegularCanon - mathematicallyVerifiedTotal);
   msg += `\n💰 *Total Liquidado: $${mathematicallyVerifiedTotal.toLocaleString("es-CO")} COP*\n`;
   if (verifiedSavings > 0) {
     msg += `🏷️ ¡Ahorro total en WZSTORE por promociones: $${verifiedSavings.toLocaleString("es-CO")} COP!\n`;
@@ -1914,7 +2128,7 @@ window.openSupportChat = (customContext = "") => {
   const timeHour = new Date().toLocaleTimeString("es-CO", { hour: '2-digit', minute: '2-digit' });
   const msgText = `Hola ${WZ_SUPPORT_CONFIG.agentName}, solicito asesoría personalizada en línea (${timeHour}). ${customContext ? `Motivo: ${customContext}` : '¿Podrían orientarme con un producto?'}`.trim();
   const supportUrl = `https://wa.me/${WZ_SUPPORT_CONFIG.phone}?text=${encodeURIComponent(msgText)}`;
-  window.open(supportUrl, "_blank", "noopener,noreferrer");
+  window.location.href = supportUrl;
 };
 
 // Controlador unificado del Modal de Tienda (reemplazo de alertas nativas)

@@ -1,5 +1,5 @@
 // Service Worker para soporte Offline y carga ultrarrápida Cache-First
-const CACHE_NAME = 'wzstore-cache-v4';
+const CACHE_NAME = 'wzstore-cache-v5';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -45,6 +45,26 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  const url = new URL(event.request.url);
+  const isLocalAsset = url.origin === self.location.origin &&
+    ['/app.js', '/styles.css', '/db.js'].some(path => url.pathname.endsWith(path));
+
+  // Recursos locales críticos: Network-First con fallback a caché
+  if (isLocalAsset) {
+    event.respondWith(
+      fetch(event.request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && (networkResponse.type === 'basic' || networkResponse.type === 'cors')) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
+        return networkResponse;
+      }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
   // Estrategia Cache-First para el resto de recursos
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
@@ -53,7 +73,7 @@ self.addEventListener('fetch', (event) => {
       }
       return fetch(event.request).then((networkResponse) => {
         // Almacenar solo respuestas válidas
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+        if (!networkResponse || networkResponse.status !== 200 || (networkResponse.type !== 'basic' && networkResponse.type !== 'cors')) {
           return networkResponse;
         }
         const responseToCache = networkResponse.clone();

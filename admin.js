@@ -758,9 +758,11 @@ window.confirmDelete = async function (id) {
         const { error } = await wzClient.from('productos').delete().eq('id', id);
         if (error) {
           console.error("Error al eliminar producto en Supabase:", error);
+          if (typeof showToast === "function") showToast(error.message, "error");
         }
       } catch (err) {
         console.error("Fallo de conexión al eliminar en Supabase:", err);
+        if (typeof showToast === "function") showToast(err.message, "error");
       }
     }
   }
@@ -917,9 +919,13 @@ window.toggleProductStatus = async function(id) {
     if (wzClient) {
       try {
         const { error } = await wzClient.from('productos').upsert(formatProductForSupabase(target));
-        if (error) console.error("Error al actualizar disponibilidad en Supabase:", error);
+        if (error) {
+          console.error("Error al actualizar disponibilidad en Supabase:", error);
+          if (typeof showToast === "function") showToast(error.message, "error");
+        }
       } catch (err) {
         console.error("Fallo de conexión al actualizar en Supabase:", err);
+        if (typeof showToast === "function") showToast(err.message, "error");
       }
     }
 
@@ -1372,6 +1378,24 @@ window.editProduct = function (id) {
     return;
   }
 
+  // Soporte bidireccional camelCase y snake_case
+  const priceRegular = p.price_regular ?? p.priceRegular;
+  const isFeatured = p.is_featured ?? p.isFeatured;
+  const isOffer = p.is_offer ?? p.isOffer;
+  const subCategory = p.sub_category ?? p.subCategory;
+  const imageUrl = p.image_url ?? p.imageUrl;
+
+  p.priceRegular = priceRegular;
+  p.price_regular = priceRegular;
+  p.isFeatured = isFeatured;
+  p.is_featured = isFeatured;
+  p.isOffer = isOffer;
+  p.is_offer = isOffer;
+  p.subCategory = subCategory;
+  p.sub_category = subCategory;
+  p.imageUrl = imageUrl;
+  p.image_url = imageUrl;
+
   // Establecer el ID de edición en memoria y en el input oculto
   editingId = targetIdStr;
   const hiddenIdInput = document.getElementById("product-id");
@@ -1383,7 +1407,7 @@ window.editProduct = function (id) {
   document.getElementById("crud-modal-title").innerText = "Editar Prenda";
   document.getElementById("prod-name").value = p.name || "";
   document.getElementById("prod-desc").value = p.description || "";
-  document.getElementById("prod-price").value = p.priceRegular || 0;
+  document.getElementById("prod-price").value = priceRegular || 0;
 
   // Cargar taxonomía (Categoría principal y subcategoría)
   const mainCat = p.category || "hombre";
@@ -1391,17 +1415,19 @@ window.editProduct = function (id) {
   if (catEl) catEl.value = mainCat;
 
   if (typeof updateSubcategoryOptions === "function") {
-    updateSubcategoryOptions(mainCat, p.subCategory || "");
+    updateSubcategoryOptions(mainCat, subCategory || "");
   }
 
   // Cargar estado de oferta y calcular porcentaje real
   const offerToggle = document.getElementById("prod-is-offer");
   if (offerToggle) {
-    offerToggle.checked = Boolean(p.isOffer);
+    offerToggle.checked = Boolean(isOffer);
     const offerControls = document.getElementById("offer-controls");
-    if (p.isOffer && p.priceRegular > 0) {
+    const numPriceRegular = Number(priceRegular) || 0;
+    const priceOffer = p.price_offer ?? p.priceOffer ?? priceRegular;
+    if (isOffer && numPriceRegular > 0) {
       if (offerControls) offerControls.classList.remove("hidden");
-      const discountPercent = Math.max(1, Math.round((1 - (p.priceOffer || p.priceRegular) / p.priceRegular) * 100));
+      const discountPercent = Math.max(1, Math.round((1 - (Number(priceOffer) || numPriceRegular) / numPriceRegular) * 100));
       const discountInput = document.getElementById("prod-discount");
       if (discountInput) discountInput.value = discountPercent;
       calculateOfferPrice();
@@ -1413,7 +1439,7 @@ window.editProduct = function (id) {
   // Cargar estado de producto destacado en portada
   const featuredCheck = document.getElementById("prod-is-featured");
   if (featuredCheck) {
-    featuredCheck.checked = Boolean(p.isFeatured);
+    featuredCheck.checked = Boolean(isFeatured);
   }
 
   // Pre-cargar selección de insignia exclusiva (Badge CRO)
@@ -1439,8 +1465,8 @@ window.editProduct = function (id) {
   let existingImages = [];
   if (Array.isArray(p.media?.images) && p.media.images.length > 0) {
     existingImages = [...p.media.images];
-  } else if (p.imageUrl) {
-    existingImages = [p.imageUrl];
+  } else if (imageUrl) {
+    existingImages = [imageUrl];
   }
 
   mediaBuffer = {
@@ -1583,18 +1609,27 @@ form.addEventListener("submit", async (e) => {
   // Guardar en localStorage únicamente como respaldo offline
   saveProducts(products);
 
+  let syncError = false;
   // Sincronización directa con la tabla 'productos' de Supabase (inserción y actualización)
   if (wzClient) {
     try {
       if (isFeaturedTrend) {
-        if (wzClient) await wzClient.from("productos").update({ is_featured: false }).neq("id", resolvedTargetId);
+        const { error: featError } = await wzClient.from("productos").update({ is_featured: false }).neq("id", resolvedTargetId);
+        if (featError) {
+          console.error("Error al sincronizar destacados en Supabase:", featError);
+          if (typeof showToast === "function") showToast(featError.message, "error");
+        }
       }
       const { error } = await wzClient.from('productos').upsert(formatProductForSupabase(productData));
       if (error) {
+        syncError = true;
         console.error("Error al sincronizar prenda con Supabase:", error);
+        if (typeof showToast === "function") showToast(error.message, "error");
       }
     } catch (err) {
+      syncError = true;
       console.error("Fallo de conexión al sincronizar con Supabase:", err);
+      if (typeof showToast === "function") showToast(err.message, "error");
     }
   }
 
@@ -1615,14 +1650,33 @@ form.addEventListener("submit", async (e) => {
   renderMediaPreviews();
   renderInventoryTable();
 
-  if (typeof showToast === "function") {
+  if (!syncError && typeof showToast === "function") {
     showToast(existingIndex > -1 ? "Prenda actualizada exitosamente." : "Prenda guardada en el catálogo.");
   }
 });
 
+// Canal Realtime para mantener sincronizada la consola multiusuario en tiempo real
+let adminProductsRealtimeChannel = null;
+
+function setupAdminRealtime() {
+  if (wzClient && !adminProductsRealtimeChannel) {
+    adminProductsRealtimeChannel = wzClient
+      .channel('admin:productos')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'productos' },
+        () => {
+          fetchProductsFromSupabase();
+        }
+      )
+      .subscribe();
+  }
+}
+
 // Sincronización centralizada inicial desde la tabla 'productos' de Supabase
 async function fetchProductsFromSupabase() {
   if (!wzClient) return;
+  setupAdminRealtime();
   try {
     const { data, error } = await wzClient.from('productos').select('*');
     if (!error && Array.isArray(data) && data.length > 0) {
@@ -1663,6 +1717,7 @@ function initDashboard() {
   renderAnalytics("day"); // Cargar por defecto vista del día
   renderInventoryTable();
   fetchProductsFromSupabase();
+  setupAdminRealtime();
 }
 
 // 9. Sistema Integral de Copia de Respaldo (Backup & Restore)

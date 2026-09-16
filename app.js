@@ -1054,7 +1054,7 @@ const initSocialProofEngine = () => {
     const prodImg = prodImages[0] || randomProduct.imageUrl || '';
 
     const imgHtml = prodImg
-      ? `<img src="${sanitizeMediaUrl(prodImg)}" alt="${sanitizeInput(randomProduct.name)}" class="w-10 h-10 rounded-lg object-cover border border-slate-700 shrink-0" onerror="this.style.display='none'">`
+      ? `<img src="${sanitizeMediaUrl(prodImg)}" alt="${sanitizeInput(randomProduct.name)}" class="w-10 h-10 rounded-lg object-cover border border-slate-700 shrink-0">`
       : `<div class="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shrink-0 text-emerald-400 font-black text-xs">WZ</div>`;
 
     toast.innerHTML = `
@@ -1474,7 +1474,7 @@ const renderCatalog = (catalogData = null) => {
       const hasMultiplePhotos = Boolean(backImg);
 
       return `
-    <div class="relative bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col group transition-all duration-300 ${isAgotado ? 'opacity-60 grayscale' : ''}">
+    <div data-product-id="${sanitizeInput(String(p.id))}" class="relative bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col group transition-all duration-300 ${isAgotado ? 'opacity-60 grayscale' : ''}">
       ${scarcityBadgeHtml}
       ${discountBadgeHtml}
       ${
@@ -1543,7 +1543,7 @@ const renderCatalog = (catalogData = null) => {
             </div>
           `
               : `
-            <button disabled class="shrink-0 bg-slate-800 text-slate-500 font-bold px-3 py-2 rounded-lg text-xs uppercase tracking-wider cursor-not-allowed pointer-events-none">Agotado</button>
+            <button disabled data-product-id="${sanitizeInput(String(p.id))}" class="shrink-0 bg-slate-800 text-slate-500 font-bold px-3 py-2 rounded-lg text-xs uppercase tracking-wider cursor-not-allowed pointer-events-none">Agotado</button>
           `
           }
         </div>
@@ -2453,49 +2453,39 @@ const processCheckout = () => {
 
   const mathematicallyVerifiedTotal = verifiedSubtotal - calculatedDiscount + verifiedFinalShipping;
 
-  // Maquetación del mensaje para despacho por WhatsApp
-  let msg = `\u{1F525} *PEDIDO #${orderId} - WZSTORE* \u{1F525}\n\n`;
-  msg += `\u{1F464} *Cliente:* ${decodeHtml(firstName)} ${decodeHtml(lastName)}\n`;
-  msg += `\u{1F4DE} *Teléfono:* ${phone}\n`;
-  msg += `\u{1F4CD} *Dirección:* ${decodeHtml(addr)}${extraAddr ? ` (${decodeHtml(extraAddr)})` : ""}\n`;
-  msg += `\u{1F3D9} *Ubicación:* ${city ? decodeHtml(city) : "C.P. " + postal}${postal && city ? ` (C.P. ${postal})` : ""}\n`;
-  msg += `\u{1F4B3} *Método de Pago:* ${paymentMethod}\n`;
-  msg += `\u{1F69A} *Modalidad de Envío:* ${shippingType === "local" ? "Local" : "Nacional"}\n`;
-  if (isCod) {
-    if (verifiedBaseShipping === 0) {
-      msg += `\u{1F4E6} *Flete / Envío:* $${verifiedFinalShipping.toLocaleString("es-CO")} COP (Flete base $0 GRATIS + $22.000 COP de recargo operativo por Pago Contra Entrega)\n\n`;
-    } else {
-      msg += `\u{1F4E6} *Flete / Envío:* $${verifiedFinalShipping.toLocaleString("es-CO")} COP (Flete base $${verifiedBaseShipping.toLocaleString("es-CO")} COP + $22.000 COP de recargo operativo por Pago Contra Entrega)\n\n`;
-    }
-  } else {
-    msg += `\u{1F4E6} *Flete / Envío:* ${verifiedFinalShipping === 0 ? "¡GRATIS!" : `$${verifiedFinalShipping.toLocaleString("es-CO")} COP`}\n\n`;
-  }
-  msg += `*Prendas Solicitadas:*\n`;
-
-  verifiedCartDetails.forEach((item) => {
-    const itemQty = Math.max(1, Math.floor(Number(item.qty) || 1));
-    msg += `\u2022 ${decodeHtml(item.name)}\n   Color: ${decodeHtml(item.color)} | Talla: ${decodeHtml(item.size)} | Cant: ${itemQty} | Sub: $${item.subtotal.toLocaleString("es-CO")}\n`;
-  });
-
-  // Cálculo del ahorro total del cliente y aplicación de la línea psicológica obligatoria
-  const verifiedSavings = (totalRegularCanon - verifiedSubtotal) + calculatedDiscount;
-  msg += `\n\u{1F4B0} *Total Liquidado: $${mathematicallyVerifiedTotal.toLocaleString("es-CO")} COP*\n`;
-  if (verifiedSavings > 0) {
-    msg += `\u{1F3F7} ¡Ahorro total en WZSTORE por promociones: $${verifiedSavings.toLocaleString("es-CO")} COP!\n`;
-  }
-  if (appliedCoupon) {
-    msg += `\u{1F39F} *Cupón Redimido:* ${appliedCoupon}\n`;
-  }
-
-  const whatsappUrl = `https://api.whatsapp.com/send?phone=573006724082&text=${encodeURIComponent(msg.normalize('NFC'))}`;
-
   const checkoutModal = document.getElementById("modal-checkout");
   if (checkoutModal) {
     checkoutModal.classList.remove("active");
   }
   stopCheckoutTimer();
 
-  // Redirección directa en lugar de window.open para eludir bloqueo de popups en iOS Safari
+  let msg = '\u{1F525} *PEDIDO #' + orderId + ' - WZSTORE* \u{1F525}\n\n';
+  msg += '\u{1F464} *Cliente:* ' + decodeHtml(firstName) + ' ' + decodeHtml(lastName) + '\n';
+  msg += '\u{1F4DE} *Tel\u00E9fono:* ' + phone + '\n';
+  msg += '\u{1F4CD} *Direcci\u00F3n:* ' + decodeHtml(addr) + (extraAddr ? ' (' + decodeHtml(extraAddr) + ')' : '') + '\n';
+  msg += '\u{1F3D9} *Ubicaci\u00F3n:* ' + (city ? decodeHtml(city) : 'C.P. ' + postal) + (postal && city ? ' (C.P. ' + postal + ')' : '') + '\n';
+  msg += '\u{1F4B3} *M\u00E9todo de Pago:* ' + paymentMethod + '\n';
+  msg += '\u{1F69A} *Modalidad de Env\u00EDo:* ' + (shippingType === 'local' ? 'Local' : 'Nacional') + '\n';
+  if (isCod) {
+    msg += '\u{1F4E6} *Flete / Env\u00EDo:* $' + verifiedFinalShipping.toLocaleString('es-CO') + ' COP (Flete base $' + verifiedBaseShipping.toLocaleString('es-CO') + ' COP + $22.000 COP de recargo operativo por Pago Contra Entrega)\n\n';
+  } else {
+    msg += '\u{1F4E6} *Flete / Env\u00EDo:* ' + (verifiedFinalShipping === 0 ? '\u00A1GRATIS!' : '$' + verifiedFinalShipping.toLocaleString('es-CO') + ' COP') + '\n\n';
+  }
+  msg += '*Prendas Solicitadas:*\n';
+  verifiedCartDetails.forEach((item) => {
+    const itemQty = Math.max(1, Math.floor(Number(item.qty) || 1));
+    msg += '\u2022 ' + decodeHtml(item.name) + '\n   Color: ' + decodeHtml(item.color) + ' | Talla: ' + decodeHtml(item.size) + ' | Cant: ' + itemQty + ' | Sub: $' + item.subtotal.toLocaleString('es-CO') + '\n';
+  });
+  const verifiedSavings = (totalRegularCanon - verifiedSubtotal) + calculatedDiscount;
+  msg += '\n\u{1F4B0} *Total Liquidado: $' + mathematicallyVerifiedTotal.toLocaleString('es-CO') + ' COP*\n';
+  if (verifiedSavings > 0) {
+    msg += '\u{1F3F7} \u00A1Ahorro total en WZSTORE por promociones: $' + verifiedSavings.toLocaleString('es-CO') + ' COP!\n';
+  }
+  if (appliedCoupon) {
+    msg += '\u{1F39F} *Cup\u00F3n Redimido:* ' + appliedCoupon + '\n';
+  }
+  const cleanPayload = msg.normalize('NFC');
+  const whatsappUrl = 'https://api.whatsapp.com/send?phone=573006724082&text=' + encodeURIComponent(cleanPayload);
   window.location.href = whatsappUrl;
 
   setTimeout(() => {
@@ -2679,7 +2669,8 @@ const WZ_SUPPORT_CONFIG = {
 
 window.openSupportChat = (customContext = "") => {
   const timeHour = new Date().toLocaleTimeString("es-CO", { hour: '2-digit', minute: '2-digit' });
-  const msgText = `Hola ${WZ_SUPPORT_CONFIG.agentName}, solicito asesoría personalizada en línea (${timeHour}). ${customContext ? `Motivo: ${customContext}` : '¿Podrían orientarme con un producto?'}`.trim();
+  let msgText = `Hola ${WZ_SUPPORT_CONFIG.agentName}, solicito asesoría personalizada en línea (${timeHour}). ${customContext ? `Motivo: ${customContext}` : '¿Podrían orientarme con un producto?'}`.trim();
+  msgText = msgText.normalize('NFC');
   const supportUrl = 'https://api.whatsapp.com/send?phone=' + WZ_SUPPORT_CONFIG.phone + '&text=' + encodeURIComponent(msgText.normalize('NFC'));
   window.location.href = supportUrl;
 };

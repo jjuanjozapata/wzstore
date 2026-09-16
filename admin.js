@@ -13,7 +13,7 @@ const formatProductForSupabase = (prod) => {
   if (!prod) return null;
   const isAvailable = Boolean(prod.is_available ?? prod.isAvailable ?? true);
   return {
-    id: prod.id,
+    id: String(prod.id),
     name: prod.name ?? "",
     description: prod.description ?? "",
     category: prod.category ?? "",
@@ -246,7 +246,13 @@ window.applyBulkPriceAdjustment = async (targetCategory, percentageChange) => {
   });
 
   saveProducts(products);
-  if (wzClient) await wzClient.from("productos").upsert(products.map(formatProductForSupabase));
+  if (wzClient) {
+    try {
+      await wzClient.from("productos").upsert(products.map(formatProductForSupabase));
+    } catch (syncErr) {
+      console.warn("Fallo de red al sincronizar ajuste masivo:", syncErr);
+    }
+  }
   renderInventoryTable();
   if (typeof recordAuditEvent === "function") {
     recordAuditEvent(`Ajuste masivo de precios: ${percentageChange}% en ${targetCategory} (${affectedCount} productos).`);
@@ -2160,7 +2166,13 @@ async function importCatalogBackup(event) {
       }
 
       saveProducts(sanitizedProducts);
-      if (wzClient) await wzClient.from("productos").upsert(sanitizedProducts.map(formatProductForSupabase));
+      if (wzClient) {
+        try {
+          await wzClient.from("productos").upsert(sanitizedProducts.map(formatProductForSupabase));
+        } catch (syncErr) {
+          console.warn("Fallo de red al restaurar en Supabase:", syncErr);
+        }
+      }
       renderInventoryTable();
       if (typeof recordAuditEvent === "function") recordAuditEvent("Restauración de catálogo desde archivo JSON");
       if (typeof showToast === "function") showToast("Catálogo restaurado exitosamente.");

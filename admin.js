@@ -114,9 +114,9 @@ const saveStoredUsers = (usersList) => {
 const getCurrentSession = () => {
   if (!currentSession) return null;
   return {
-    username: currentSession.user?.email || "admin",
+    username: currentSession.user?.email || "worker",
     email: currentSession.user?.email || "",
-    role: currentSession.user?.user_metadata?.role || "admin",
+    role: currentSession.user?.app_metadata?.role || "worker",
   };
 };
 
@@ -343,12 +343,18 @@ if (cancelPwdBtn) cancelPwdBtn.addEventListener("click", closePasswordModal);
 
 if (pwdForm) {
   const currPassInput = document.getElementById("wz-pwd-current");
-  if (currPassInput) currPassInput.removeAttribute("required");
+  if (currPassInput) currPassInput.setAttribute("required", "required");
 
   pwdForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    const currentPassword = document.getElementById("wz-pwd-current")?.value || "";
     const newPass = document.getElementById("wz-pwd-new")?.value || "";
     const confirmPass = document.getElementById("wz-pwd-confirm")?.value || "";
+
+    if (!currentPassword) {
+      showToast("Por favor ingresa tu contraseña actual.", "error");
+      return;
+    }
 
     if (newPass.length < 6) {
       showToast("La nueva clave debe tener al menos 6 caracteres.", "error");
@@ -365,7 +371,22 @@ if (pwdForm) {
       return;
     }
 
+    if (!currentSession?.user?.email) {
+      showToast("No hay una sesión activa para reautenticar.", "error");
+      return;
+    }
+
     try {
+      const { error: authError } = await wzClient.auth.signInWithPassword({
+        email: currentSession.user.email,
+        password: currentPassword,
+      });
+
+      if (authError) {
+        showToast("La contraseña actual es incorrecta.", "error");
+        return;
+      }
+
       const { data, error } = await wzClient.auth.updateUser({ password: newPass });
       if (error) {
         showToast(error.message || "Error al actualizar la contraseña.", "error");
@@ -647,10 +668,12 @@ function renderInventoryTable() {
             v.sizes.forEach((s) => {
               const stockNum = Number(s.stock) || 0;
               const stockColor = stockNum === 0 ? "text-red-400" : stockNum < 3 ? "text-amber-400" : "text-emerald-400";
+              const safeColor = sanitizeInput(v.color);
+              const safeSize = sanitizeInput(s.size);
               variantsHtml += `
                 <div class="inline-flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 px-2.5 py-1 rounded-xl text-xs text-slate-300">
-                  ${v.color && v.color !== 'Único' ? `<span class="w-2 h-2 rounded-full" style="background-color: ${v.colorHex || '#10b981'}"></span><span class="text-slate-400 font-medium">${v.color}</span> · ` : ''}
-                  <span class="font-bold text-white">Talla ${s.size}</span>
+                  ${safeColor && safeColor !== 'Único' ? `<span class="w-2 h-2 rounded-full" style="background-color: ${v.colorHex || '#10b981'}"></span><span class="text-slate-400 font-medium">${safeColor}</span> · ` : ''}
+                  <span class="font-bold text-white">Talla ${safeSize}</span>
                   <span class="text-slate-600">:</span>
                   <span class="${stockColor} font-bold font-mono">${stockNum}</span>
                 </div>
@@ -661,16 +684,20 @@ function renderInventoryTable() {
         variantsHtml += `</div>`;
       }
 
+      const safeCategory = sanitizeInput(p.category) || 'General';
+      const safeSubCategory = p.subCategory ? sanitizeInput(p.subCategory) : '';
+      const safeImageUrl = sanitizeInput(p.imageUrl || (p.media?.images && p.media.images[0]) || 'https://images.unsplash.com/photo-1581636625402-29f2a01222ce');
+
       return `
         <div class="flex flex-col w-full p-4 rounded-2xl bg-card border border-gray-800 hover:border-gray-700 transition-all shadow-lg space-y-3">
           <div class="flex items-start gap-3 w-full">
-            <img src="${p.imageUrl || (p.media?.images && p.media.images[0]) || 'https://images.unsplash.com/photo-1581636625402-29f2a01222ce'}" class="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-xl border border-gray-700 shrink-0" alt="${p.name}">
+            <img src="${safeImageUrl}" class="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-xl border border-gray-700 shrink-0" alt="${p.name}">
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between gap-2">
                 <h3 class="font-bold text-white text-base truncate leading-tight">${p.name}</h3>
                 <span class="text-xs text-gray-500 font-mono shrink-0">#${displayId}</span>
               </div>
-              <p class="text-xs text-gray-400 capitalize mt-0.5">${p.category || 'General'} ${p.subCategory ? '· ' + p.subCategory : ''}</p>
+              <p class="text-xs text-gray-400 capitalize mt-0.5">${safeCategory} ${safeSubCategory ? '· ' + safeSubCategory : ''}</p>
               <div class="mt-1.5 flex items-baseline gap-2 flex-wrap">
                 <span class="text-base font-bold text-white">$${Number(p.priceRegular || 0).toLocaleString("es-CO")}</span>
                 ${p.isOffer ? `<span class="text-xs text-neon font-extrabold bg-neon/10 border border-neon/30 px-2 py-0.5 rounded-full">OFERTA: $${Number(p.priceOffer || 0).toLocaleString("es-CO")}</span>` : ""}
@@ -1221,7 +1248,7 @@ function syncCurrentVariantsFromTemp() {
     if (!grouped[col]) {
       grouped[col] = {
         color: col,
-        colorHex: item.colorHex || "#" + Math.floor(Math.random() * 16777215).toString(16),
+        colorHex: item.colorHex || "#" + Math.floor(Math.random() * 16777215).toString(16).padStart(6, "0"),
         sizes: []
       };
     }
@@ -1285,7 +1312,7 @@ function addVariant() {
   } else {
     tempVariants.push({
       color: color,
-      colorHex: "#" + Math.floor(Math.random() * 16777215).toString(16),
+      colorHex: "#" + Math.floor(Math.random() * 16777215).toString(16).padStart(6, "0"),
       size: size,
       stock: stock
     });

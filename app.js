@@ -20,6 +20,21 @@ const sanitizeInput = (str) => {
 
 const decodeHtml = (str) => { const txt = document.createElement("textarea"); txt.innerHTML = str; return txt.value; };
 
+const SAFE_MEDIA_FALLBACK = "https://images.unsplash.com/photo-1581636625402-29f2a01222ce";
+
+const sanitizeMediaUrl = (url) => {
+  if (typeof url !== "string") return SAFE_MEDIA_FALLBACK;
+  const trimmed = url.trim();
+  if (!trimmed) return SAFE_MEDIA_FALLBACK;
+  if (trimmed.includes('"') || trimmed.includes("'") || /javascript:/i.test(trimmed)) {
+    return SAFE_MEDIA_FALLBACK;
+  }
+  const allowedPrefixes = ["https://", "http://", "data:image/", "./"];
+  const hasValidPrefix = allowedPrefixes.some((prefix) => trimmed.startsWith(prefix));
+  return hasValidPrefix ? trimmed : SAFE_MEDIA_FALLBACK;
+};
+window.sanitizeMediaUrl = sanitizeMediaUrl;
+
 let products = [];
 let cart = [];
 let uiState = {}; // Guarda estado del selector de color/talla por producto
@@ -1010,7 +1025,7 @@ const initSocialProofEngine = () => {
     const prodImg = prodImages[0] || randomProduct.imageUrl || '';
 
     const imgHtml = prodImg
-      ? `<img src="${prodImg}" alt="${sanitizeInput(randomProduct.name)}" class="w-10 h-10 rounded-lg object-cover border border-slate-700 shrink-0" onerror="this.style.display='none'">`
+      ? `<img src="${sanitizeMediaUrl(prodImg)}" alt="${sanitizeInput(randomProduct.name)}" class="w-10 h-10 rounded-lg object-cover border border-slate-700 shrink-0" onerror="this.style.display='none'">`
       : `<div class="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shrink-0 text-emerald-400 font-black text-xs">WZ</div>`;
 
     toast.innerHTML = `
@@ -1060,24 +1075,31 @@ document.addEventListener("DOMContentLoaded", async () => {
   const stickyTitle = document.getElementById("wz-sticky-title");
   const stickyPrice = document.getElementById("wz-sticky-price");
   if (stickyBar) {
+    let ticking = false;
     window.addEventListener("scroll", () => {
-      const currentScrollY = window.scrollY;
-      if (currentScrollY > 320) {
-        // Obtener el primer producto visible en el viewport
-        const cards = document.querySelectorAll(".product-media-container");
-        for (const card of cards) {
-          const rect = card.getBoundingClientRect();
-          if (rect.top >= 0 && rect.top <= 400) {
-            const prodTitle = card.parentElement.querySelector("h3")?.innerText;
-            const prodPrice = card.parentElement.querySelector("[data-product-price]")?.innerText;
-            if (stickyTitle && prodTitle) stickyTitle.textContent = prodTitle;
-            if (stickyPrice && prodPrice) stickyPrice.textContent = prodPrice;
-            break;
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const currentScrollY = window.scrollY;
+          if (currentScrollY > 320) {
+            // Obtener el primer producto visible en el viewport
+            const cards = document.querySelectorAll(".product-media-container");
+            for (const card of cards) {
+              const rect = card.getBoundingClientRect();
+              if (rect.top >= 0 && rect.top <= 400) {
+                const prodTitle = card.parentElement.querySelector("h3")?.innerText;
+                const prodPrice = card.parentElement.querySelector("[data-product-price]")?.innerText;
+                if (stickyTitle && prodTitle) stickyTitle.textContent = prodTitle;
+                if (stickyPrice && prodPrice) stickyPrice.textContent = prodPrice;
+                break;
+              }
+            }
+            stickyBar.classList.remove("translate-y-full");
+          } else {
+            stickyBar.classList.add("translate-y-full");
           }
-        }
-        stickyBar.classList.remove("translate-y-full");
-      } else {
-        stickyBar.classList.add("translate-y-full");
+          ticking = false;
+        });
+        ticking = true;
       }
     }, { passive: true });
   }
@@ -1161,9 +1183,11 @@ const setupEventListeners = () => {
   // Listener para actualización inmediata de flete y recargo por método de pago
   const paymentMethodSelect = document.getElementById("chk-payment-method");
   if (paymentMethodSelect) {
-    paymentMethodSelect.addEventListener("change", () => {
+    const handlePaymentMethodChange = () => {
       updateCartUI();
-    });
+    };
+    paymentMethodSelect.addEventListener("change", handlePaymentMethodChange);
+    paymentMethodSelect.addEventListener("input", handlePaymentMethodChange);
   }
 
   // Conexión para el cierre del Bottom Sheet de tallas
@@ -1230,13 +1254,19 @@ const renderFeaturedHero = () => {
 
   // Despliegue multimedia: Video looping o Imagen principal
   if (featured.media?.video) {
-    videoEl.src = featured.media.video;
-    videoEl.classList.remove("hidden");
+    if (videoEl) {
+      if (videoEl.getAttribute("data-src") !== featured.media.video) {
+        videoEl.src = featured.media.video;
+        videoEl.setAttribute("data-src", featured.media.video);
+        videoEl.play().catch(() => {});
+      }
+      videoEl.classList.remove("hidden");
+    }
     if (galleryEl) galleryEl.classList.add("hidden");
-    videoEl.play().catch(() => {});
   } else {
     if (videoEl) {
       videoEl.pause();
+      videoEl.removeAttribute("data-src");
       videoEl.classList.add("hidden");
     }
     if (galleryEl && imgFallback) {
@@ -1308,6 +1338,9 @@ const renderCatalog = (catalogData = null) => {
       const isAgotado = p.status === "agotado" || p.isAvailable === false || totalStock <= 0;
       const state = uiState[p.id];
       const currentVariant = p.variants?.[state?.colorIdx || 0] || p.variants?.[0];
+      if (state && state.sizeIdx !== null && !currentVariant?.sizes?.[state.sizeIdx]) {
+        state.sizeIdx = null;
+      }
       const finalPrice = p.isOffer ? p.priceOffer : p.priceRegular;
       const sizesHtml = (currentVariant?.sizes || [])
         .map((s, idx) => {
@@ -1368,8 +1401,8 @@ const renderCatalog = (catalogData = null) => {
                 ? p.images
                 : (p.imageUrl ? [p.imageUrl] : [])));
 
-      const frontImg = prodImages[0] || p.imageUrl || 'https://images.unsplash.com/photo-1581636625402-29f2a01222ce';
-      const backImg = prodImages.length >= 2 ? prodImages[1] : '';
+      const frontImg = sanitizeMediaUrl(prodImages[0] || p.imageUrl || 'https://images.unsplash.com/photo-1581636625402-29f2a01222ce');
+      const backImg = prodImages.length >= 2 ? sanitizeMediaUrl(prodImages[1]) : '';
       const hasMultiplePhotos = Boolean(backImg);
 
       return `
@@ -1391,17 +1424,17 @@ const renderCatalog = (catalogData = null) => {
       <div 
         class="product-media-container relative h-64 bg-slate-950 overflow-hidden ${hasMultiplePhotos ? 'cursor-pointer' : ''}" 
         data-product-id="${p.id}"
-        data-front-src="${frontImg}"
-        ${hasMultiplePhotos ? `data-back-src="${backImg}"` : ''}
+        data-front-src="${sanitizeMediaUrl(frontImg)}"
+        ${hasMultiplePhotos ? `data-back-src="${sanitizeMediaUrl(backImg)}"` : ''}
       >
         <!-- Skeleton loader animado de fondo -->
         <div class="skeleton-placeholder absolute inset-0 bg-slate-800 animate-pulse transition-opacity duration-300 pointer-events-none"></div>
         <!-- Imagen con decodificación asíncrona desacoplada del hilo principal -->
         <img 
-          src="${frontImg}" 
+          src="${sanitizeMediaUrl(frontImg)}" 
           alt="${sanitizeInput(p.name)}" 
-          data-front-src="${frontImg}"
-          ${hasMultiplePhotos ? `data-back-src="${backImg}"` : ''}
+          data-front-src="${sanitizeMediaUrl(frontImg)}"
+          ${hasMultiplePhotos ? `data-back-src="${sanitizeMediaUrl(backImg)}"` : ''}
           data-current-view="front"
           data-image-index="0"
           class="w-full h-full object-cover transition-all duration-300 group-hover:scale-105 opacity-0" 
@@ -1763,6 +1796,7 @@ if (typeof document !== "undefined") {
           if (mutation.type === "attributes" && mutation.attributeName === "class") {
             if (checkoutEl.classList.contains("active")) {
               startCheckoutTimer();
+              updateCartUI();
             }
           }
         }
@@ -1810,6 +1844,16 @@ const updateCartUI = () => {
     cartItemsContainer.innerHTML =
       '<p class="text-gray-400 text-center mt-10">Tu carrito está vacío.</p>';
     totalsContainer.style.display = "none";
+    const chkSummarySubtotal = document.getElementById("chk-summary-subtotal");
+    const chkSummaryDiscount = document.getElementById("chk-summary-discount");
+    const chkSummaryShipping = document.getElementById("chk-summary-shipping");
+    const chkSummaryTotal = document.getElementById("chk-summary-total");
+    if (chkSummarySubtotal) chkSummarySubtotal.textContent = "$0";
+    if (chkSummaryDiscount) chkSummaryDiscount.textContent = "-$0";
+    if (chkSummaryShipping) chkSummaryShipping.textContent = "$0";
+    if (chkSummaryTotal) chkSummaryTotal.textContent = "$0";
+    const finalBuyBtn = document.getElementById("final-buy-btn");
+    if (finalBuyBtn) finalBuyBtn.dataset.total = "0";
     return;
   }
 
@@ -1857,7 +1901,7 @@ const updateCartUI = () => {
 
     cartItemsContainer.innerHTML += `
       <div class="flex gap-4 mb-4 bg-[#1e293b] p-3 rounded-lg relative items-center">
-        <img src="${item.img || ''}" class="w-16 h-16 object-cover rounded flex-shrink-0" alt="${sanitizeInput(item.name || '')}" onerror="window.handleImageError(this)">
+        <img src="${sanitizeMediaUrl(item.img || '')}" class="w-16 h-16 object-cover rounded flex-shrink-0" alt="${sanitizeInput(item.name || '')}" onerror="window.handleImageError(this)">
         <div class="flex-1 min-w-0 pr-6">
           <p class="text-sm font-bold text-white leading-tight truncate">${sanitizeInput(item.name || '')}</p>
           <p class="text-xs text-gray-400 mt-0.5">${sanitizeInput(item.color || '')} | Talla: ${sanitizeInput(item.size || '')}</p>
@@ -1954,6 +1998,25 @@ const updateCartUI = () => {
 
   document.getElementById("total-val").textContent = `$${finalTotal.toLocaleString("es-CO")}`;
   document.getElementById("final-buy-btn").dataset.total = finalTotal;
+
+  // Sincronización en tiempo real del resumen financiero dinámico en el Checkout
+  const chkSummarySubtotal = document.getElementById("chk-summary-subtotal");
+  const chkSummaryDiscount = document.getElementById("chk-summary-discount");
+  const chkSummaryShipping = document.getElementById("chk-summary-shipping");
+  const chkSummaryTotal = document.getElementById("chk-summary-total");
+
+  if (chkSummarySubtotal) {
+    chkSummarySubtotal.textContent = `$${subtotal.toLocaleString("es-CO")}`;
+  }
+  if (chkSummaryDiscount) {
+    chkSummaryDiscount.textContent = `-$${discount.toLocaleString("es-CO")}`;
+  }
+  if (chkSummaryShipping) {
+    chkSummaryShipping.textContent = `$${finalShippingCost.toLocaleString("es-CO")}`;
+  }
+  if (chkSummaryTotal) {
+    chkSummaryTotal.textContent = `$${finalTotal.toLocaleString("es-CO")}`;
+  }
 };
 
 // UI Drawer
@@ -2258,7 +2321,7 @@ const processCheckout = () => {
 
   // Reglas de flete gratuito automático sobre $300.000 COP o con cupón FREEATHLETE
   let verifiedBaseShipping = SHIP_RATES[shippingType] || 5000;
-  if (verifiedSubtotal > 300000 || appliedCoupon === "FREEATHLETE") {
+  if (verifiedSubtotal >= 300000 || appliedCoupon === "FREEATHLETE") {
     verifiedBaseShipping = 0;
   }
 

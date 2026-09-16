@@ -819,6 +819,13 @@
             </select>
           </div>
 
+          <div id="wz-checkout-summary" class="bg-[#0a0d14] border border-[#1e293b] p-3 rounded-lg space-y-1.5 text-xs text-slate-300 mb-3">
+            <div class="flex justify-between"><span>Subtotal prendas:</span><span id="chk-summary-subtotal" class="font-semibold text-white">$0</span></div>
+            <div class="flex justify-between text-emerald-400"><span>Descuento aplicado:</span><span id="chk-summary-discount">-$0</span></div>
+            <div class="flex justify-between"><span>Flete y recargos:</span><span id="chk-summary-shipping" class="font-semibold text-white">$0</span></div>
+            <div class="flex justify-between text-sm font-black text-white border-t border-slate-800 pt-1.5 mt-1.5"><span>TOTAL A LIQUIDAR:</span><span id="chk-summary-total" class="text-emerald-400">$0</span></div>
+          </div>
+
           <button
             id="final-buy-btn"
             data-action="checkout-final"

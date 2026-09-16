@@ -1,5 +1,5 @@
 // Service Worker para soporte Offline y carga ultrarrápida Cache-First
-const CACHE_NAME = 'wzstore-cache-v7';
+const CACHE_NAME = 'wzstore-cache-v8';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -18,8 +18,15 @@ const ASSETS_TO_CACHE = [
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+    caches.open(CACHE_NAME).then(async (cache) => {
+      const results = await Promise.allSettled(
+        ASSETS_TO_CACHE.map((asset) => cache.add(asset))
+      );
+      results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.warn(`[SW] Advertencia: no se pudo precachear ${ASSETS_TO_CACHE[index]}:`, result.reason);
+        }
+      });
     }).then(() => self.skipWaiting())
   );
 });
@@ -37,8 +44,9 @@ self.addEventListener('activate', (event) => {
 
 // Listener fetch con manejo diferenciado para Supabase, navegación y recursos estáticos
 self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  if (url.hostname.endsWith('supabase.co')) return;
   if (event.request.method !== 'GET') return;
-  if (event.request.url.includes('supabase.co')) return;
 
   // Solicitudes de navegación: Network-First con fallback offline
   if (event.request.mode === 'navigate') {
@@ -52,7 +60,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  const url = new URL(event.request.url);
   const isLocalAsset = url.origin === self.location.origin &&
     ['/app.js', '/styles.css', '/db.js', '/admin.js'].some(path => url.pathname.endsWith(path));
 

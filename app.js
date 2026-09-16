@@ -18,6 +18,8 @@ const sanitizeInput = (str) => {
   }).trim();
 };
 
+const decodeHtml = (str) => { const txt = document.createElement("textarea"); txt.innerHTML = str; return txt.value; };
+
 let products = [];
 let cart = [];
 let uiState = {}; // Guarda estado del selector de color/talla por producto
@@ -539,13 +541,14 @@ window.showStoreModal = (mensaje, titulo = "WZSTORE") => {
   modal.classList.add("flex");
 };
 
-window.closeStoreModal = () => {
+const closeStoreModal = () => {
   const modal = document.getElementById("wz-store-modal") || document.getElementById("wz-alert-modal");
   if (modal) {
     modal.classList.add("hidden");
     modal.classList.remove("flex");
   }
 };
+window.closeStoreModal = closeStoreModal;
 
 // Reemplazo transparente de alert() nativo
 window.alert = (msg) => window.showStoreModal(msg);
@@ -660,6 +663,13 @@ document.addEventListener("click", (e) => {
   const target = e.target;
   if (!target) return;
 
+  const supportBtn = target.closest("#wz-support-btn");
+  if (supportBtn) {
+    e.preventDefault();
+    window.openSupportChat();
+    return;
+  }
+
   // Cierre del panel inferior Bottom Sheet de tallas
   if (target.id === "wz-size-sheet-overlay" || target.closest("#wz-close-sheet-btn")) {
     e.preventDefault();
@@ -699,11 +709,13 @@ document.addEventListener("click", (e) => {
   const heroBuyBtn = target.closest("#wz-hero-buy-btn, [data-action='hero-buy']");
   if (heroBuyBtn) {
     e.preventDefault();
+    const featured = products.find((p) => p.isFeatured && p.status !== "agotado") || products.find((p) => p.media?.video && p.status !== "agotado");
     if (heroSelectedSizeIdx === null || heroSelectedSizeIdx === -1) {
-      window.showStoreModal("Por favor elige una talla disponible para el Drop de la Semana.", "Selecciona una Talla");
+      if (featured) {
+        openSizeBottomSheet(featured.id, 'add');
+      }
       return;
     }
-    const featured = products.find((p) => p.isFeatured && p.status !== "agotado") || products.find((p) => p.media?.video && p.status !== "agotado");
     if (featured) {
       uiState[featured.id] = { colorIdx: 0, sizeIdx: heroSelectedSizeIdx };
       window.addToCart(featured.id);
@@ -728,11 +740,12 @@ document.addEventListener("click", (e) => {
   const stickyCtaBtn = target.closest("#wz-sticky-cta");
   if (stickyCtaBtn) {
     e.preventDefault();
-    if (cart.length > 0) {
+    const action = stickyCtaBtn.dataset.action || stickyCtaBtn.getAttribute("data-action");
+    if (action === "open-checkout") {
       document.getElementById("modal-checkout")?.classList.add("active");
       if (typeof startCheckoutTimer === "function") startCheckoutTimer();
       if (typeof closeDrawer === "function") closeDrawer();
-    } else {
+    } else if (action === "scroll-catalog") {
       document.getElementById("catalog-grid")?.scrollIntoView({ behavior: "smooth" });
     }
     return;
@@ -816,8 +829,10 @@ document.addEventListener("click", (e) => {
 
   // 7. Cerrar Checkout
   const closeCheckoutBtn = target.closest("#close-modal, [data-action='close-checkout']");
-  if (closeCheckoutBtn) {
+  if (closeCheckoutBtn || target.id === "modal-checkout") {
     e.preventDefault();
+    clearInterval(checkoutTimerInterval);
+    checkoutTimerInterval = null;
     document.getElementById("modal-checkout")?.classList.remove("active");
     return;
   }
@@ -1776,30 +1791,10 @@ const updateCartUI = () => {
       stickyCta.className = "shrink-0 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-black text-[11px] uppercase tracking-wider px-4 py-2.5 rounded-lg transition-transform flex items-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer";
       stickyCta.innerHTML = `<svg class="w-4 h-4 fill-current" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg><span>Finalizar Pedido (${cart.length})</span>`;
       stickyCta.dataset.action = "open-checkout";
-      stickyCta.onclick = (e) => {
-        if (e) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-        const checkoutModal = document.getElementById("modal-checkout");
-        if (checkoutModal) {
-          checkoutModal.classList.add("active");
-          startCheckoutTimer();
-        }
-        if (typeof closeDrawer === "function") closeDrawer();
-      };
     } else {
       stickyCta.className = "shrink-0 bg-slate-800 hover:bg-slate-700 active:scale-95 text-white font-black text-[11px] uppercase tracking-wider px-4 py-2.5 rounded-lg transition-transform flex items-center gap-1.5 shadow-md border border-slate-700 cursor-pointer";
       stickyCta.innerHTML = `<svg class="w-4 h-4 fill-current" viewBox="0 0 20 20"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/></svg><span>Ver Vitrina</span>`;
       stickyCta.dataset.action = "scroll-catalog";
-      stickyCta.onclick = (e) => {
-        if (e) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-        const catalogGrid = document.getElementById("catalog-grid");
-        if (catalogGrid) catalogGrid.scrollIntoView({ behavior: "smooth" });
-      };
     }
   }
 
@@ -2113,21 +2108,46 @@ const processCheckout = () => {
   const addr = cleanText(rawAddr);
   const extraAddr = cleanText(rawExtraAddr);
 
+  const highlightInputError = (inputEl) => {
+    if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+    if (inputEl) {
+      inputEl.focus();
+      inputEl.classList.add("border-red-500");
+      setTimeout(() => {
+        inputEl.classList.remove("border-red-500");
+      }, 2000);
+    }
+  };
+
   const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]{2,40}$/;
 
   if (!nameRegex.test(firstName) || !nameRegex.test(lastName)) {
+    const firstInput = document.getElementById("chk-firstname");
+    const lastInput = document.getElementById("chk-lastname");
+    if (!nameRegex.test(firstName)) {
+      highlightInputError(firstInput);
+      if (!nameRegex.test(lastName) && lastInput) {
+        lastInput.classList.add("border-red-500");
+        setTimeout(() => lastInput.classList.remove("border-red-500"), 2000);
+      }
+    } else {
+      highlightInputError(lastInput);
+    }
     showNotificationModal("Datos Inválidos", "Por favor ingresa nombres y apellidos válidos (solo letras sin caracteres especiales).");
     return;
   }
   if (phone.length < 7 || phone.length > 15) {
+    highlightInputError(document.getElementById("chk-phone"));
     showNotificationModal("Teléfono Inválido", "Ingresa un número telefónico válido de entre 7 y 15 dígitos.");
     return;
   }
   if (!city && !postal) {
+    highlightInputError(document.getElementById("chk-city"));
     showNotificationModal("Ubicación Requerida", "Debes especificar la Ciudad o el Código Postal.");
     return;
   }
   if (addr.length < 5) {
+    highlightInputError(document.getElementById("chk-addr"));
     showNotificationModal("Dirección Incompleta", "Por favor especifica una dirección de entrega válida.");
     return;
   }
@@ -2250,10 +2270,10 @@ const processCheckout = () => {
 
   // Maquetación del mensaje para despacho por WhatsApp
   let msg = `🔥 *PEDIDO #${orderId} - WZSTORE* 🔥\n\n`;
-  msg += `👤 *Cliente:* ${firstName} ${lastName}\n`;
+  msg += `👤 *Cliente:* ${decodeHtml(firstName)} ${decodeHtml(lastName)}\n`;
   msg += `📞 *Teléfono:* ${phone}\n`;
-  msg += `📍 *Dirección:* ${addr}${extraAddr ? ` (${extraAddr})` : ""}\n`;
-  msg += `🏙️ *Ubicación:* ${city ? city : "C.P. " + postal}${postal && city ? ` (C.P. ${postal})` : ""}\n`;
+  msg += `📍 *Dirección:* ${decodeHtml(addr)}${extraAddr ? ` (${decodeHtml(extraAddr)})` : ""}\n`;
+  msg += `🏙️ *Ubicación:* ${city ? decodeHtml(city) : "C.P. " + postal}${postal && city ? ` (C.P. ${postal})` : ""}\n`;
   msg += `💳 *Método de Pago:* ${paymentMethod}\n`;
   msg += `🚚 *Modalidad de Envío:* ${shippingType === "local" ? "Local" : "Nacional"}\n`;
   if (isCod) {
@@ -2265,7 +2285,7 @@ const processCheckout = () => {
 
   verifiedCartDetails.forEach((item) => {
     const itemQty = Math.max(1, Math.floor(Number(item.qty) || 1));
-    msg += `▪ ${item.name}\n   Color: ${item.color} | Talla: ${item.size} | Cant: ${itemQty} | Sub: $${item.subtotal.toLocaleString("es-CO")}\n`;
+    msg += `▪ ${decodeHtml(item.name)}\n   Color: ${decodeHtml(item.color)} | Talla: ${decodeHtml(item.size)} | Cant: ${itemQty} | Sub: $${item.subtotal.toLocaleString("es-CO")}\n`;
   });
 
   // Cálculo del ahorro total del cliente y aplicación de la línea psicológica obligatoria
@@ -2468,3 +2488,14 @@ window.openSupportChat = (customContext = "") => {
 // Controlador unificado del Modal de Tienda (reemplazo de alertas nativas)
 window.showNotificationModal = (title, message) => window.showStoreModal(message, title);
 window.closeNotificationModal = () => window.closeStoreModal();
+
+// Listener global para la tecla Escape
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    closeDrawer();
+    closeSizeBottomSheet();
+    document.getElementById("modal-checkout")?.classList.remove("active");
+    closeStoreModal();
+  }
+});
+

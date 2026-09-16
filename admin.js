@@ -752,12 +752,13 @@ document.addEventListener("DOMContentLoaded", () => {
 // Acción de Doble Confirmación para Eliminar
 window.confirmDelete = async function (id) {
   const btn = document.getElementById(`del-btn-${id}`);
-  if (btn.innerText === "Eliminar") {
-    btn.innerText = "¿Seguro?";
+  if (!btn) return;
+  if (btn.innerText.includes("Eliminar")) {
+    btn.innerHTML = '<span>⚠️</span> ¿Seguro?';
     btn.classList.add("text-orange-500", "font-black");
     setTimeout(() => {
       if (btn) {
-        btn.innerText = "Eliminar";
+        btn.innerHTML = '<span>🗑️</span> Eliminar';
         btn.classList.remove("text-orange-500", "font-black");
       }
     }, 3000);

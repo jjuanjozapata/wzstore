@@ -251,6 +251,7 @@ const syncDatabaseVersion = () => {
 syncDatabaseVersion();
 
 let productsRealtimeChannel = null;
+let realtimeAppDebounceTimer = null;
 
 // Carga centralizada de productos desde Supabase con respaldo offline
 const loadProducts = async () => {
@@ -404,79 +405,82 @@ const initApp = async () => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'productos' },
-        async () => {
-          await loadProducts();
-          if (typeof renderFeaturedHero === "function") {
-            renderFeaturedHero();
-          }
-          if (typeof executeMasterFilters === "function") {
-            executeMasterFilters();
-          } else if (typeof renderCatalog === "function") {
-            renderCatalog();
-          }
+        () => {
+          if (realtimeAppDebounceTimer) clearTimeout(realtimeAppDebounceTimer);
+          realtimeAppDebounceTimer = setTimeout(async () => {
+            await loadProducts();
+            if (typeof renderFeaturedHero === "function") {
+              renderFeaturedHero();
+            }
+            if (typeof executeMasterFilters === "function") {
+              executeMasterFilters();
+            } else if (typeof renderCatalog === "function") {
+              renderCatalog();
+            }
 
-          // Rutina de reconciliación de inventario en carrito activo
-          if (Array.isArray(cart) && cart.length > 0) {
-            let cartModified = false;
-            const updatedCart = [];
+            // Rutina de reconciliación de inventario en carrito activo
+            if (Array.isArray(cart) && cart.length > 0) {
+              let cartModified = false;
+              const updatedCart = [];
 
-            for (const item of cart) {
-              const p = products.find((prod) => String(prod.id) === String(item.id));
-              const isProductOutOfStock = !p || p.status === "agotado" || p.isAvailable === false || p.is_available === false;
+              for (const item of cart) {
+                const p = products.find((prod) => String(prod.id) === String(item.id));
+                const isProductOutOfStock = !p || p.status === "agotado" || p.isAvailable === false || p.is_available === false;
 
-              if (isProductOutOfStock) {
-                cartModified = true;
-                continue;
-              }
+                if (isProductOutOfStock) {
+                  cartModified = true;
+                  continue;
+                }
 
-              let variants = p.variants;
-              if (typeof variants === "string") {
-                try {
-                  variants = JSON.parse(variants);
-                } catch (e) {
-                  variants = [];
+                let variants = p.variants;
+                if (typeof variants === "string") {
+                  try {
+                    variants = JSON.parse(variants);
+                  } catch (e) {
+                    variants = [];
+                  }
+                }
+                const variantsList = Array.isArray(variants) ? variants : [];
+                const cleanColor = String(item.color || "").trim().toLowerCase();
+                const matchedVariant = variantsList.find(
+                  (v) => v.color && v.color.trim().toLowerCase() === cleanColor
+                ) || variantsList[0];
+
+                const cleanSize = String(item.size || "").trim().toUpperCase();
+                const matchedSizeObj = matchedVariant?.sizes?.find(
+                  (s) => String(s.size || "").trim().toUpperCase() === cleanSize
+                );
+
+                let availableStock = matchedSizeObj ? Number(matchedSizeObj.stock) || 0 : 0;
+                if (!matchedSizeObj && typeof p.stock === "number") {
+                  availableStock = p.stock;
+                }
+
+                if (availableStock <= 0) {
+                  cartModified = true;
+                } else if (item.qty > availableStock) {
+                  item.qty = availableStock;
+                  item.maxStock = availableStock;
+                  updatedCart.push(item);
+                  cartModified = true;
+                } else {
+                  item.maxStock = availableStock;
+                  updatedCart.push(item);
                 }
               }
-              const variantsList = Array.isArray(variants) ? variants : [];
-              const cleanColor = String(item.color || "").trim().toLowerCase();
-              const matchedVariant = variantsList.find(
-                (v) => v.color && v.color.trim().toLowerCase() === cleanColor
-              ) || variantsList[0];
 
-              const cleanSize = String(item.size || "").trim().toUpperCase();
-              const matchedSizeObj = matchedVariant?.sizes?.find(
-                (s) => String(s.size || "").trim().toUpperCase() === cleanSize
-              );
-
-              let availableStock = matchedSizeObj ? Number(matchedSizeObj.stock) || 0 : 0;
-              if (!matchedSizeObj && typeof p.stock === "number") {
-                availableStock = p.stock;
-              }
-
-              if (availableStock <= 0) {
-                cartModified = true;
-              } else if (item.qty > availableStock) {
-                item.qty = availableStock;
-                item.maxStock = availableStock;
-                updatedCart.push(item);
-                cartModified = true;
-              } else {
-                item.maxStock = availableStock;
-                updatedCart.push(item);
+              if (cartModified) {
+                cart = updatedCart;
+                saveCart();
+                updateCartUI();
+                if (typeof showStoreModal === "function") {
+                  showStoreModal("Actualizamos tu carrito debido a cambios recientes de inventario.", "Inventario Actualizado");
+                } else if (typeof window.showStoreModal === "function") {
+                  window.showStoreModal("Actualizamos tu carrito debido a cambios recientes de inventario.", "Inventario Actualizado");
+                }
               }
             }
-
-            if (cartModified) {
-              cart = updatedCart;
-              saveCart();
-              updateCartUI();
-              if (typeof showStoreModal === "function") {
-                showStoreModal("Actualizamos tu carrito debido a cambios recientes de inventario.", "Inventario Actualizado");
-              } else if (typeof window.showStoreModal === "function") {
-                window.showStoreModal("Actualizamos tu carrito debido a cambios recientes de inventario.", "Inventario Actualizado");
-              }
-            }
-          }
+          }, 350);
         }
       )
       .subscribe();
@@ -935,6 +939,19 @@ document.addEventListener("click", (e) => {
     return;
   }
 
+  // Selección de color en tarjeta
+  const colorBtn = target.closest("[data-action='select-color']");
+  if (colorBtn) {
+    e.preventDefault();
+    const productId = colorBtn.dataset.productId;
+    const colorIndex = colorBtn.dataset.colorIndex;
+    if (productId && colorIndex !== undefined) {
+      window.selectColor(productId, parseInt(colorIndex, 10));
+      if (navigator.vibrate) navigator.vibrate(12);
+    }
+    return;
+  }
+
   // 14. Selección de talla en tarjeta
   const sizeBtn = target.closest("[data-action='select-size'], button[onclick*='selectSize']");
   if (sizeBtn) {
@@ -1194,10 +1211,26 @@ const setupEventListeners = () => {
   // Tarifas logísticas
   const shippingSelect = document.getElementById("shipping-select");
   if (shippingSelect) {
-    shippingSelect.addEventListener("change", (e) => {
+    const handleDrawerShippingChange = (e) => {
       shippingType = e.target.value;
+      const chkShipping = document.getElementById("chk-shipping-type");
+      if (chkShipping) chkShipping.value = shippingType;
       updateCartUI();
-    });
+    };
+    shippingSelect.addEventListener("change", handleDrawerShippingChange);
+    shippingSelect.addEventListener("input", handleDrawerShippingChange);
+  }
+
+  const chkShippingTypeSelect = document.getElementById("chk-shipping-type");
+  if (chkShippingTypeSelect) {
+    const handleChkShippingChange = (e) => {
+      shippingType = e.target.value;
+      const drawerShipping = document.getElementById("shipping-select");
+      if (drawerShipping) drawerShipping.value = shippingType;
+      updateCartUI();
+    };
+    chkShippingTypeSelect.addEventListener("change", handleChkShippingChange);
+    chkShippingTypeSelect.addEventListener("input", handleChkShippingChange);
   }
 
   // Listener para actualización inmediata de flete y recargo por método de pago
@@ -1363,12 +1396,24 @@ const renderCatalog = (catalogData = null) => {
         v.sizes?.forEach((s) => (totalStock += Number(s.stock) || 0));
       });
       const isAgotado = p.status === "agotado" || p.isAvailable === false || totalStock <= 0;
+      if (!uiState[p.id]) {
+        uiState[p.id] = { colorIdx: 0, sizeIdx: null };
+      }
       const state = uiState[p.id];
       const currentVariant = p.variants?.[state?.colorIdx || 0] || p.variants?.[0];
       if (state && state.sizeIdx !== null && !currentVariant?.sizes?.[state.sizeIdx]) {
         state.sizeIdx = null;
       }
       const finalPrice = p.isOffer ? p.priceOffer : p.priceRegular;
+      const colorsHtml = (p.variants && p.variants.length > 1)
+        ? `<div class="flex items-center gap-1.5 mb-2 flex-wrap">${p.variants
+            .map((v, cIdx) => {
+              const isSelected = (state?.colorIdx || 0) === cIdx;
+              const ringClass = isSelected ? " ring-2 ring-emerald-400" : "";
+              return `<button type="button" class="color-pill w-4 h-4 rounded-full border border-slate-600 transition-transform${ringClass}" style="background-color: ${v.colorHex || '#10b981'}" data-action="select-color" data-product-id="${p.id}" data-color-index="${cIdx}" title="${sanitizeInput(v.color || '')}"></button>`;
+            })
+            .join("")}</div>`
+        : "";
       const sizesHtml = (currentVariant?.sizes || [])
         .map((s, idx) => {
           const isDisabled = isAgotado || s.stock === 0;
@@ -1478,6 +1523,7 @@ const renderCatalog = (catalogData = null) => {
           </div>
           <p class="text-xs text-slate-400 line-clamp-2 mb-2">${sanitizeInput(p.description)}</p>
           <div class="my-2">
+            ${colorsHtml}
             <div class="flex gap-1.5 flex-wrap">${sizesHtml}</div>
           </div>
         </div>
@@ -1518,6 +1564,9 @@ const renderCatalog = (catalogData = null) => {
 };
 
 window.selectColor = (productId, colorIdx) => {
+  if (!uiState[productId]) {
+    uiState[productId] = { colorIdx: 0, sizeIdx: null };
+  }
   uiState[productId].colorIdx = colorIdx;
   uiState[productId].sizeIdx = null; // reset talla al cambiar color
   renderCatalog();
@@ -1858,6 +1907,12 @@ const updateCartUI = () => {
   const cartItemsContainer = document.getElementById("cart-items");
   const totalsContainer = document.getElementById("cart-totals");
   const stickyCta = document.getElementById("wz-sticky-cta");
+
+  // Sincronización del tipo de envío en ambos selectores (cajón y checkout)
+  const shippingSelect = document.getElementById("shipping-select");
+  if (shippingSelect) shippingSelect.value = shippingType;
+  const chkShippingType = document.getElementById("chk-shipping-type");
+  if (chkShippingType) chkShippingType.value = shippingType;
 
   if (stickyCta) {
     if (cart.length > 0) {

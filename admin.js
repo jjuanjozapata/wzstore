@@ -204,13 +204,14 @@ async function checkAuth() {
     });
   }
 
-  const { data: { session }, error } = await wzClient.auth.getSession();
-  if (error || !session) {
-    currentSession = null;
+  const { data: { user }, error } = await wzClient.auth.getUser();
+  if (error || !user) {
+    clearSession();
     if (overlay) overlay.classList.remove("hidden");
     if (dashboard) dashboard.classList.add("hidden");
   } else {
-    currentSession = session;
+    const { data: sessionData } = await wzClient.auth.getSession();
+    currentSession = sessionData?.session ? { ...sessionData.session, user } : { user };
     if (overlay) overlay.classList.add("hidden");
     if (dashboard) dashboard.classList.remove("hidden");
     initDashboard();
@@ -590,7 +591,7 @@ function renderAnalytics(timeframe = "day") {
       return `
             <div class="mb-2">
                 <div class="flex justify-between text-xs mb-1 text-gray-300">
-                    <span>${name}</span>
+                    <span>${sanitizeInput(name)}</span>
                     <span class="font-bold text-neon">${qty} unds</span>
                 </div>
                 <div class="w-full bg-dark rounded-full h-3 overflow-hidden border border-gray-700">
@@ -818,7 +819,8 @@ function renderInventoryTable() {
       }
       
       const safeId = String(p.id);
-      const displayId = safeId.includes("-") ? safeId.split("-")[1] : safeId;
+      const rawDisplayId = safeId.includes("-") ? safeId.split("-")[1] : safeId;
+      const displayId = sanitizeInput(rawDisplayId);
 
       // Variantes organizadas como chips táctiles de visualización inmediata
       let variantsHtml = "";
@@ -856,14 +858,14 @@ function renderInventoryTable() {
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between gap-2">
                 <h3 class="font-bold text-white text-base truncate leading-tight">${sanitizeInput(p.name)}</h3>
-                <span class="text-xs text-gray-500 font-mono shrink-0">#${displayId}</span>
+                <span class="text-xs text-gray-500 font-mono shrink-0">#${sanitizeInput(displayId)}</span>
               </div>
               <p class="text-xs text-gray-400 capitalize mt-0.5">${safeCategory} ${safeSubCategory ? '· ' + safeSubCategory : ''}</p>
               <div class="mt-1.5 flex items-baseline gap-2 flex-wrap">
                 <span class="text-base font-bold text-white">$${Number(p.priceRegular || 0).toLocaleString("es-CO")}</span>
                 ${p.isOffer ? `<span class="text-xs text-neon font-extrabold bg-neon/10 border border-neon/30 px-2 py-0.5 rounded-full">OFERTA: $${Number(p.priceOffer || 0).toLocaleString("es-CO")}</span>` : ""}
               </div>
-              ${(p.badge || p.tag) ? `<div class="mt-1.5"><span class="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${String(p.badge || p.tag).toLowerCase().includes('agotan') ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40' : 'bg-slate-900 text-yellow-300 border border-yellow-500/40'}">${p.badge || p.tag}</span></div>` : ''}
+              ${(p.badge || p.tag) ? `<div class="mt-1.5"><span class="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${String(p.badge || p.tag).toLowerCase().includes('agotan') ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40' : 'bg-slate-900 text-yellow-300 border border-yellow-500/40'}">${sanitizeInput(p.badge || p.tag)}</span></div>` : ''}
             </div>
           </div>
 
@@ -1525,13 +1527,15 @@ function renderVariantsList() {
 
   let html = `<div class="flex flex-col gap-2 w-full">`;
   tempVariants.forEach((v, idx) => {
+    const safeSize = sanitizeInput(v.size);
+    const safeColor = sanitizeInput(v.color);
     html += `
       <div class="flex items-center justify-between bg-slate-900 border border-slate-700 p-3 rounded-xl text-xs font-semibold text-white shadow-sm hover:border-emerald-500/50 transition-all w-full">
         <div class="flex items-center gap-2.5">
           <span class="w-3 h-3 rounded-full shrink-0" style="background-color: ${v.colorHex || '#10b981'}"></span>
           <div>
-            <span class="text-white font-bold text-sm">Talla ${v.size}</span>
-            <span class="text-gray-400 font-normal ml-1.5">(${v.color && v.color !== "Único" ? v.color : "Color único"})</span>
+            <span class="text-white font-bold text-sm">Talla ${safeSize}</span>
+            <span class="text-gray-400 font-normal ml-1.5">(${safeColor && safeColor !== "Único" ? safeColor : "Color único"})</span>
           </div>
         </div>
         <div class="flex items-center gap-2.5">

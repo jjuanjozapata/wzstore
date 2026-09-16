@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="es">
   <head>
+    <script>if(window.top !== window.self){ window.top.location = window.self.location; }</script>
     <!-- Declaración canónica de favicons para Google Search Essentials con URLs absolutas estables -->
     <link rel="icon" type="image/png" sizes="48x48" href="https://jjuanjozapata.github.io/wzstore/logo-48.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="https://jjuanjozapata.github.io/wzstore/logo-192.png" />
@@ -816,6 +817,14 @@
               <option value="Transferencia Bancaria (Bancolombia / Nequi)">Transferencia Bancaria (Bancolombia / Nequi)</option>
               <option value="Pago Contra Entrega">Pago Contra Entrega (Efectivo al recibir)</option>
               <option value="PSE / Tarjeta Débito">PSE / Tarjeta Débito</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="chk-shipping-type" class="text-xs text-slate-400 font-semibold block mb-1">Zona de Entrega *</label>
+            <select id="chk-shipping-type" class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-base sm:text-sm outline-none focus:border-emerald-500 border border-slate-700 cursor-pointer">
+              <option value="local">Envío Local (+$5.000 COP)</option>
+              <option value="nacional">Envío Nacional (+$20.000 COP)</option>
             </select>
           </div>
 

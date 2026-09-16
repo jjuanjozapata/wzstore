@@ -554,7 +554,85 @@ function loadProducts() {
   }
 }
 
-function saveProducts(products) {
+// Compresión forzada de imágenes Base64 a resolución máxima de 400px con calidad 0.5
+const compressBase64ToMax400 = (base64Str, maxDim = 400, quality = 0.5) => {
+  return new Promise((resolve) => {
+    if (typeof base64Str !== "string" || !base64Str.startsWith("data:image")) {
+      return resolve(base64Str);
+    }
+    const img = new Image();
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+      if (width > maxDim || height > maxDim) {
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, 0, 0, width, height);
+        try {
+          const compressed = canvas.toDataURL("image/jpeg", quality);
+          resolve(compressed);
+        } catch (e) {
+          resolve(base64Str);
+        }
+      } else {
+        resolve(base64Str);
+      }
+    };
+    img.onerror = () => resolve(base64Str);
+    img.src = base64Str;
+  });
+};
+
+const compressProductsImagesForced = async (productList) => {
+  const cache = new Map();
+  const processValue = async (val) => {
+    if (typeof val === "string") {
+      if (val.startsWith("data:image")) {
+        if (cache.has(val)) return cache.get(val);
+        const compressed = await compressBase64ToMax400(val, 400, 0.5);
+        cache.set(val, compressed);
+        return compressed;
+      }
+      return val;
+    }
+    if (Array.isArray(val)) {
+      const arr = [];
+      for (const item of val) {
+        arr.push(await processValue(item));
+      }
+      return arr;
+    }
+    if (val && typeof val === "object") {
+      const obj = {};
+      for (const k of Object.keys(val)) {
+        obj[k] = await processValue(val[k]);
+      }
+      return obj;
+    }
+    return val;
+  };
+
+  const processedList = [];
+  for (const prod of productList) {
+    processedList.push(await processValue(prod));
+  }
+  return processedList;
+};
+
+async function saveProducts(products) {
   try {
     if (!Array.isArray(products)) {
       throw new Error("Estructura de catálogo inválida para persistencia.");
@@ -576,17 +654,19 @@ function saveProducts(products) {
       if (typeof window.garbageCollector === "function") {
         window.garbageCollector();
       }
-      // Reintentar guardado tras recolección
+      // Compresión forzada sobre el array de productos (Base64 a máx 400px y calidad 0.5)
       try {
-        const minimized = products.map((item) => ({
-          ...item,
-          media: { images: item.media?.images ? [item.media.images[0]] : [], video: "" }
-        }));
-        localStorage.setItem("wz_core_products", JSON.stringify(minimized));
+        const compressedProducts = await compressProductsImagesForced(products);
+        localStorage.setItem("wz_core_products", JSON.stringify(compressedProducts));
+        localStorage.removeItem("wz_products");
         if (typeof showToast === "function") {
-          showToast("Alerta: Memoria optimizada. Se depuraron videos pesados para salvar el catálogo.", "error");
+          showToast("Alerta: Memoria optimizada mediante compresión forzada de imágenes (400px, calidad 0.5).", "warning");
+        }
+        if (typeof recordAuditEvent === "function") {
+          recordAuditEvent("Compresión forzada de imágenes Base64 aplicada por QuotaExceededError.");
         }
       } catch (retryErr) {
+        console.error("Error crítico en compresión forzada o cuota de almacenamiento:", retryErr);
         if (typeof showToast === "function") {
           showToast("Error crítico: Memoria completamente llena. Exporta un respaldo y libera espacio.", "error");
         }
@@ -709,7 +789,7 @@ function renderInventoryTable() {
           <div class="flex items-center justify-between bg-dark/60 p-3 rounded-xl border border-gray-800/80 w-full">
             <div class="flex items-center gap-3">
               <label class="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" onchange="toggleProductStatus('${safeId}')" class="sr-only peer" ${isAvailable ? "checked" : ""}>
+                <input type="checkbox" data-action="toggle-status" data-id="${safeId}" class="sr-only peer" ${isAvailable ? "checked" : ""}>
                 <div class="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-neon"></div>
               </label>
               <span class="text-xs font-semibold text-gray-300">Disponibilidad</span>
@@ -725,7 +805,7 @@ function renderInventoryTable() {
             </button>
             ${
               (typeof getCurrentSession === "function" && getCurrentSession()?.role === "admin")
-                ? `<button type="button" id="del-btn-${safeId}" onclick="confirmDelete('${safeId}')" class="flex-1 py-2.5 px-4 bg-slate-800 hover:bg-red-950/40 text-red-400 font-bold rounded-xl text-xs sm:text-sm text-center transition-colors cursor-pointer flex items-center justify-center gap-1.5">
+                ? `<button type="button" id="del-btn-${safeId}" data-action="delete" data-id="${safeId}" class="flex-1 py-2.5 px-4 bg-slate-800 hover:bg-red-950/40 text-red-400 font-bold rounded-xl text-xs sm:text-sm text-center transition-colors cursor-pointer flex items-center justify-center gap-1.5">
                     <span>🗑️</span> Eliminar
                   </button>`
                 : `<span class="flex-1 py-2.5 px-4 bg-slate-900 text-gray-600 font-medium rounded-xl text-xs text-center cursor-not-allowed">Bloqueado</span>`
@@ -743,7 +823,7 @@ const MAX_LOGS = 50;
 
 window.recordAuditEvent = (actionDescription) => {
   const session = getCurrentSession();
-  const actor = session ? session.username : "Sistema";
+  const actor = session ? "Administrador" : "Sistema";
   const newLog = {
     timestamp: new Date().toLocaleString("es-CO"),
     actor: actor,
@@ -762,15 +842,31 @@ window.recordAuditEvent = (actionDescription) => {
   localStorage.setItem(AUDIT_LOGS_KEY, JSON.stringify(logs));
 };
 
-// Delegación global de clics para capturar el botón Editar sin fallas de binding
+// Delegación global de clics para capturar acciones (Editar, Toggle Status, Eliminar) sin fallas de binding
 document.addEventListener("DOMContentLoaded", () => {
   const tableBody = document.getElementById("inventory-table-body");
   if (tableBody) {
     tableBody.addEventListener("click", (e) => {
       const editBtn = e.target.closest('button[data-action="edit"]');
       if (editBtn) {
-        const prodId = editBtn.getAttribute("data-id");
-        if (prodId) window.editProduct(prodId);
+        const prodId = editBtn.dataset.id || editBtn.getAttribute("data-id");
+        if (prodId && typeof window.editProduct === "function") window.editProduct(prodId);
+      }
+
+      const toggleStatusEl = e.target.closest('[data-action="toggle-status"]');
+      if (toggleStatusEl) {
+        const prodId = toggleStatusEl.dataset.id;
+        if (prodId && typeof window.toggleProductStatus === "function") {
+          window.toggleProductStatus(prodId);
+        }
+      }
+
+      const deleteBtn = e.target.closest('[data-action="delete"]');
+      if (deleteBtn) {
+        const prodId = deleteBtn.dataset.id;
+        if (prodId && typeof window.confirmDelete === "function") {
+          window.confirmDelete(prodId);
+        }
       }
     });
   }
@@ -1788,6 +1884,34 @@ if (btnExportDb) {
   btnExportDb.addEventListener("click", window.exportCatalogBackup);
 }
 
+// Sanitización recursiva contra Prototype Pollution
+const sanitizeAgainstPrototypePollution = (item) => {
+  if (item === null || typeof item !== "object") {
+    return item;
+  }
+  if (Array.isArray(item)) {
+    return item.map(sanitizeAgainstPrototypePollution);
+  }
+  const clean = {};
+  for (const key of Object.getOwnPropertyNames(item)) {
+    if (key === "__proto__" || key === "constructor" || key === "prototype") {
+      continue;
+    }
+    clean[key] = sanitizeAgainstPrototypePollution(item[key]);
+  }
+  return clean;
+};
+
+// Validación de cadenas alfanuméricas
+const isValidAlphanumericString = (val, allowSpaces = false) => {
+  if (typeof val !== "string") return false;
+  const trimmed = val.trim();
+  if (!trimmed) return false;
+  return allowSpaces
+    ? /^[\p{L}\p{N}\s\-_.,]+$/u.test(trimmed) && /[\p{L}\p{N}]/u.test(trimmed)
+    : /^[\p{L}\p{N}\-_]+$/u.test(trimmed) && /[\p{L}\p{N}]/u.test(trimmed);
+};
+
 window.importCatalogBackup = (event) => {
   const file = event.target.files[0];
   if (!file) return;
@@ -1797,9 +1921,21 @@ window.importCatalogBackup = (event) => {
     try {
       const importedData = JSON.parse(e.target.result);
       if (!Array.isArray(importedData)) throw new Error("El archivo no contiene un catálogo válido.");
-      
-      saveProducts(importedData);
-      if (wzClient) await wzClient.from("productos").upsert(importedData.map(formatProductForSupabase));
+
+      // Rutina de sanitización recursiva contra Prototype Pollution
+      const sanitizedProducts = importedData.map(sanitizeAgainstPrototypePollution);
+
+      // Verificación de que el ID y el nombre sean strings alfanuméricos válidos
+      const allValid = sanitizedProducts.every(
+        (p) => p && typeof p === "object" && isValidAlphanumericString(p.id, false) && isValidAlphanumericString(p.name, true)
+      );
+
+      if (!allValid) {
+        throw new Error("El archivo contiene productos con identificadores o nombres no válidos.");
+      }
+
+      saveProducts(sanitizedProducts);
+      if (wzClient) await wzClient.from("productos").upsert(sanitizedProducts.map(formatProductForSupabase));
       renderInventoryTable();
       if (typeof recordAuditEvent === "function") recordAuditEvent("Restauración de catálogo desde archivo JSON");
       if (typeof showToast === "function") showToast("Catálogo restaurado exitosamente.");

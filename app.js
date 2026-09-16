@@ -18,7 +18,7 @@ const sanitizeInput = (str) => {
   }).trim();
 };
 
-const decodeHtml = (str) => { const txt = document.createElement("textarea"); txt.innerHTML = str; return txt.value; };
+const decodeHtml = (str) => typeof str !== 'string' ? '' : str.replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
 const SAFE_MEDIA_FALLBACK = "https://images.unsplash.com/photo-1581636625402-29f2a01222ce";
 
@@ -26,10 +26,23 @@ const sanitizeMediaUrl = (url) => {
   if (typeof url !== "string") return SAFE_MEDIA_FALLBACK;
   const trimmed = url.trim();
   if (!trimmed) return SAFE_MEDIA_FALLBACK;
-  if (trimmed.includes('"') || trimmed.includes("'") || /javascript:/i.test(trimmed)) {
+  if (
+    trimmed.includes('"') ||
+    trimmed.includes("'") ||
+    /javascript:/i.test(trimmed) ||
+    /data:image\/svg/i.test(trimmed) ||
+    /\\|%[0-9a-fA-F]{2}/i.test(trimmed)
+  ) {
     return SAFE_MEDIA_FALLBACK;
   }
-  const allowedPrefixes = ["https://", "http://", "data:image/", "./"];
+  const allowedPrefixes = [
+    "https://",
+    "http://",
+    "./",
+    "data:image/jpeg;",
+    "data:image/png;",
+    "data:image/webp;"
+  ];
   const hasValidPrefix = allowedPrefixes.some((prefix) => trimmed.startsWith(prefix));
   return hasValidPrefix ? trimmed : SAFE_MEDIA_FALLBACK;
 };
@@ -461,6 +474,8 @@ const initApp = async () => {
       )
       .subscribe();
   }
+
+  checkAbandonedCartReminder();
 };
 
 // Enlace de compatibilidad con renderizado directo
@@ -846,8 +861,7 @@ document.addEventListener("click", (e) => {
   const closeCheckoutBtn = target.closest("#close-modal, [data-action='close-checkout']");
   if (closeCheckoutBtn || target.id === "modal-checkout") {
     e.preventDefault();
-    clearInterval(checkoutTimerInterval);
-    checkoutTimerInterval = null;
+    stopCheckoutTimer();
     document.getElementById("modal-checkout")?.classList.remove("active");
     return;
   }
@@ -857,6 +871,7 @@ document.addEventListener("click", (e) => {
   if (finalBuyBtn) {
     e.preventDefault();
     processCheckout();
+    stopCheckoutTimer();
     return;
   }
 
@@ -1786,6 +1801,14 @@ const startCheckoutTimer = () => {
 };
 window.startCheckoutTimer = startCheckoutTimer;
 
+const stopCheckoutTimer = () => {
+  if (checkoutTimerInterval) {
+    clearInterval(checkoutTimerInterval);
+    checkoutTimerInterval = null;
+  }
+};
+window.stopCheckoutTimer = stopCheckoutTimer;
+
 // Observador para activar el temporizador automáticamente al desplegar modal-checkout
 if (typeof document !== "undefined") {
   const initCheckoutObserver = () => {
@@ -2012,7 +2035,13 @@ const updateCartUI = () => {
     chkSummaryDiscount.textContent = `-$${discount.toLocaleString("es-CO")}`;
   }
   if (chkSummaryShipping) {
-    chkSummaryShipping.textContent = `$${finalShippingCost.toLocaleString("es-CO")}`;
+    if (finalShippingCost === 0) {
+      chkSummaryShipping.textContent = "¡GRATIS!";
+    } else if (isCod) {
+      chkSummaryShipping.textContent = `$${finalShippingCost.toLocaleString("es-CO")} (${shippingCost === 0 ? "Contra Entrega" : "Flete + Contra Entrega"})`;
+    } else {
+      chkSummaryShipping.textContent = `$${finalShippingCost.toLocaleString("es-CO")}`;
+    }
   }
   if (chkSummaryTotal) {
     chkSummaryTotal.textContent = `$${finalTotal.toLocaleString("es-CO")}`;
@@ -2340,7 +2369,11 @@ const processCheckout = () => {
   msg += `💳 *Método de Pago:* ${paymentMethod}\n`;
   msg += `🚚 *Modalidad de Envío:* ${shippingType === "local" ? "Local" : "Nacional"}\n`;
   if (isCod) {
-    msg += `📦 *Flete / Envío:* $${verifiedFinalShipping.toLocaleString("es-CO")} COP (Incluye $22.000 COP de recargo operativo por Pago Contra Entrega)\n\n`;
+    if (verifiedBaseShipping === 0) {
+      msg += `📦 *Flete / Envío:* $${verifiedFinalShipping.toLocaleString("es-CO")} COP (Flete base $0 GRATIS + $22.000 COP de recargo operativo por Pago Contra Entrega)\n\n`;
+    } else {
+      msg += `📦 *Flete / Envío:* $${verifiedFinalShipping.toLocaleString("es-CO")} COP (Flete base $${verifiedBaseShipping.toLocaleString("es-CO")} COP + $22.000 COP de recargo operativo por Pago Contra Entrega)\n\n`;
+    }
   } else {
     msg += `📦 *Flete / Envío:* ${verifiedFinalShipping === 0 ? "¡GRATIS!" : `$${verifiedFinalShipping.toLocaleString("es-CO")} COP`}\n\n`;
   }
@@ -2376,6 +2409,7 @@ const processCheckout = () => {
   if (checkoutModal) {
     checkoutModal.classList.remove("active");
   }
+  stopCheckoutTimer();
 };
 
 
@@ -2448,7 +2482,13 @@ const initMobileVideoObserver = () => {
   });
 };
 
-window.addEventListener("resize", initMobileVideoObserver);
+let resizeVideoObserverTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeVideoObserverTimer);
+  resizeVideoObserverTimer = setTimeout(() => {
+    initMobileVideoObserver();
+  }, 250);
+});
 
 window.playProductVideo = (container, productId) => {
   if (window.innerWidth < 1024) return;
@@ -2557,6 +2597,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     closeDrawer();
     closeSizeBottomSheet();
+    stopCheckoutTimer();
     document.getElementById("modal-checkout")?.classList.remove("active");
     closeStoreModal();
   }

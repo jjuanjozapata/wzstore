@@ -218,7 +218,10 @@ async function checkAuth() {
 
 // 10. Actualización Masiva de Precios por Categoría
 window.applyBulkPriceAdjustment = async (targetCategory, percentageChange) => {
-  if (getCurrentSession()?.role !== 'admin') { showToast('Acceso denegado: Se requiere rol de administrador.', 'error'); return; }
+  if (getCurrentSession()?.role !== 'admin') {
+    showToast("Acceso denegado: Requiere rol de administrador.", "error");
+    return;
+  }
   const factor = 1 + (Number(percentageChange) / 100);
   if (isNaN(factor) || factor <= 0) {
     if (typeof showToast === "function") showToast("Porcentaje de ajuste inválido.", "error");
@@ -348,6 +351,11 @@ if (openPwdBtn) {
 }
 if (closePwdBtn) closePwdBtn.addEventListener("click", closePasswordModal);
 if (cancelPwdBtn) cancelPwdBtn.addEventListener("click", closePasswordModal);
+if (pwdModal) {
+  pwdModal.addEventListener("click", (e) => {
+    if (e.target === pwdModal) closePasswordModal();
+  });
+}
 
 if (pwdForm) {
   const currPassInput = document.getElementById("wz-pwd-current");
@@ -408,7 +416,6 @@ if (pwdForm) {
   });
 }
 
-// Controladores para Modal de Registro de Trabajador
 const workerModal = document.getElementById("wz-worker-modal");
 const openWorkerModalBtn = document.getElementById("wz-open-worker-modal-btn");
 const closeWorkerBtn = document.getElementById("wz-close-worker-btn");
@@ -416,65 +423,76 @@ const cancelWorkerBtn = document.getElementById("wz-cancel-worker-btn");
 const workerForm = document.getElementById("wz-worker-form");
 
 const closeWorkerModal = () => {
-  if (workerModal) workerModal.classList.add("hidden");
+  if (workerModal) { workerModal.classList.add("hidden"); workerModal.classList.remove("flex"); }
   if (workerForm) workerForm.reset();
 };
 
 if (openWorkerModalBtn) {
   openWorkerModalBtn.addEventListener("click", () => {
-    if (workerModal) workerModal.classList.remove("hidden");
+    if (getCurrentSession()?.role !== "admin") {
+      showToast("Acceso restringido: Solo administradores.", "error");
+      return;
+    }
+    if (workerModal) { workerModal.classList.remove("hidden"); workerModal.classList.add("flex"); }
   });
 }
+
 if (closeWorkerBtn) closeWorkerBtn.addEventListener("click", closeWorkerModal);
 if (cancelWorkerBtn) cancelWorkerBtn.addEventListener("click", closeWorkerModal);
+if (workerModal) {
+  workerModal.addEventListener("click", (e) => {
+    if (e.target === workerModal) closeWorkerModal();
+  });
+}
 
 if (workerForm) {
   workerForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-
+    if (getCurrentSession()?.role !== 'admin') {
+      showToast("Acceso denegado: Requiere rol de administrador.", "error");
+      return;
+    }
     const emailInput = document.getElementById("wz-worker-email");
     const pwdInput = document.getElementById("wz-worker-pwd");
     const submitBtn = document.getElementById("wz-submit-worker-btn") || workerForm.querySelector('button[type="submit"]');
 
     const email = emailInput ? emailInput.value.trim().toLowerCase() : "";
     const password = pwdInput ? pwdInput.value.trim() : "";
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
+    if (!emailRegex.test(email)) {
+      showToast("Ingresa un correo corporativo válido.", "error");
+      return;
+    }
     if (password.length < 8) {
-      showToast("La contraseña debe tener al menos 8 caracteres.", "error");
+      showToast("La clave debe tener al menos 8 caracteres.", "error");
       return;
     }
 
-    const originalBtnText = submitBtn ? submitBtn.textContent : "Registrar";
+    const originalText = submitBtn ? submitBtn.textContent : "Registrar";
     if (submitBtn) {
       submitBtn.disabled = true;
       submitBtn.textContent = "Registrando...";
     }
 
     try {
-      const { data, error } = await wzClient.rpc('admin_create_worker', { worker_email: email, worker_password: password });
-
-      if (error) {
-        showToast(error.message, "error");
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.textContent = originalBtnText;
-        }
-        return;
-      }
-
-      showToast("Trabajador registrado exitosamente.");
+      const { data, error } = await wzClient.rpc('admin_create_worker', {
+        worker_email: email,
+        worker_password: password
+      });
+      if (error) throw error;
       closeWorkerModal();
       workerForm.reset();
-      recordAuditEvent("Registro de nuevo trabajador: " + email);
-      if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.textContent = originalBtnText;
+      if (typeof recordAuditEvent === "function") {
+        recordAuditEvent("Trabajador creado: " + email);
       }
+      showToast("Trabajador registrado exitosamente.");
     } catch (err) {
-      showToast(err.message || "Error al registrar el trabajador.", "error");
+      showToast(err.message || "Error al crear trabajador.", "error");
+    } finally {
       if (submitBtn) {
         submitBtn.disabled = false;
-        submitBtn.textContent = originalBtnText;
+        submitBtn.textContent = originalText;
       }
     }
   });
@@ -1024,6 +1042,9 @@ function initRestockModal() {
 
   closeBtn?.addEventListener("click", closeModal);
   cancelBtn?.addEventListener("click", closeModal);
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeModal();
+  });
 
   confirmBtn?.addEventListener("click", () => {
     const qty = parseInt(qtyInput.value, 10);
@@ -2050,6 +2071,36 @@ document.addEventListener("DOMContentLoaded", () => {
       if (restoreInput) restoreInput.click();
     });
   }
+
+  const restoreInput = document.getElementById("wz-restore-input");
+  if (restoreInput) {
+    restoreInput.addEventListener("change", importCatalogBackup);
+  }
+
+  // Soporte de cierre con clic en backdrop a los contenedores
+  const workerModalEl = document.getElementById("wz-worker-modal");
+  if (workerModalEl) {
+    workerModalEl.addEventListener("click", (e) => {
+      if (e.target === workerModalEl) closeWorkerModal();
+    });
+  }
+  const pwdModalEl = document.getElementById("wz-password-modal");
+  if (pwdModalEl) {
+    pwdModalEl.addEventListener("click", (e) => {
+      if (e.target === pwdModalEl) closePasswordModal();
+    });
+  }
+  const restockModalEl = document.getElementById("wz-restock-modal");
+  if (restockModalEl) {
+    restockModalEl.addEventListener("click", (e) => {
+      if (e.target === restockModalEl) {
+        restockModalEl.classList.add("hidden");
+        restockModalEl.classList.remove("flex");
+        restockTargetId = null;
+        if (typeof renderInventoryTable === "function") renderInventoryTable();
+      }
+    });
+  }
 });
 
 // Sanitización recursiva contra Prototype Pollution
@@ -2080,7 +2131,7 @@ const isValidAlphanumericString = (val, allowSpaces = false) => {
     : /^[\p{L}\p{N}\-_]+$/u.test(trimmed) && /[\p{L}\p{N}]/u.test(trimmed);
 };
 
-window.importCatalogBackup = (event) => {
+async function importCatalogBackup(event) {
   if (getCurrentSession()?.role !== 'admin') {
     showToast('Acceso denegado', 'error');
     if (event?.target) event.target.value = "";
@@ -2120,6 +2171,7 @@ window.importCatalogBackup = (event) => {
   reader.readAsText(file);
   event.target.value = "";
 };
+window.importCatalogBackup = importCatalogBackup;
 
 // Arrancar al cargar la vista
 document.addEventListener("DOMContentLoaded", checkAuth);
@@ -2144,3 +2196,22 @@ const executeGarbageCollector = () => {
     }
   });
 };
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if (typeof closeWorkerModal === "function") closeWorkerModal();
+    if (typeof closePasswordModal === "function") closePasswordModal();
+    if (typeof closeModal === "function") closeModal();
+    const crud = document.getElementById("crud-modal");
+    if (crud && !crud.classList.contains("hidden")) {
+      crud.classList.add("opacity-0");
+      setTimeout(() => crud.classList.add("hidden"), 300);
+    }
+    const restock = document.getElementById("wz-restock-modal");
+    if (restock) {
+      restock.classList.add("hidden");
+      restock.classList.remove("flex");
+      restockTargetId = null;
+    }
+  }
+});

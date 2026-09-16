@@ -1083,6 +1083,7 @@ const initSocialProofEngine = () => {
 
   // Programar repetición aleatoria cada 25 a 35 segundos
   const scheduleNext = () => {
+    if (document.hidden) { setTimeout(scheduleNext, 5000); return; }
     const randomDelay = Math.floor(Math.random() * (35000 - 25000 + 1)) + 25000;
     setTimeout(() => {
       triggerToast();
@@ -1704,7 +1705,7 @@ const executeBuyNow = (productId) => {
   const existing = cart.find(
     (i) =>
       String(i.id) === String(p.id) &&
-      i.color === (variant.color || "") &&
+      (i.color || "").trim().toLowerCase() === (variant.color || "").trim().toLowerCase() &&
       i.size === sizeObj.size
   );
 
@@ -1764,7 +1765,9 @@ window.addToCart = (productId) => {
 
   const existing = cart.find(
     (i) =>
-      String(i.id) === String(p.id) && i.color === variant.color && i.size === sizeObj.size,
+      String(i.id) === String(p.id) &&
+      (i.color || "").trim().toLowerCase() === (variant.color || "").trim().toLowerCase() &&
+      i.size === sizeObj.size,
   );
 
   if (existing) {
@@ -1992,9 +1995,11 @@ const updateCartUI = () => {
       if (!item.maxStock) item.maxStock = 10;
     }
 
-    const verifiedUnitPrice = masterProduct 
-      ? (masterProduct.isOffer ? Number(masterProduct.priceOffer) : Number(masterProduct.priceRegular))
-      : Number(item.price);
+    let verifiedUnitPrice = masterProduct ? (masterProduct.isOffer ? Number(masterProduct.priceOffer) : Number(masterProduct.priceRegular)) : (Number(item.price) || 0);
+    if (isNaN(verifiedUnitPrice) || !masterProduct) {
+      item.price = 0;
+      verifiedUnitPrice = 0;
+    }
 
     // Sobrescribir precio manipulado en el objeto con el precio del catálogo
     item.price = verifiedUnitPrice;
@@ -2486,20 +2491,6 @@ const processCheckout = () => {
 
   const whatsappUrl = `https://wa.me/573006724082?text=${encodeURIComponent(msg)}`;
 
-  // Envolver el vaciado de carrito y almacenamiento en pagehide para no borrar antes de navegar
-  window.addEventListener(
-    "pagehide",
-    () => {
-      cart = [];
-      appliedCoupon = null;
-      saveCart();
-      updateCartUI();
-      localStorage.removeItem("wz_cart_last_activity");
-      localStorage.removeItem("wz_cart_reminder_sent");
-    },
-    { once: true }
-  );
-
   const checkoutModal = document.getElementById("modal-checkout");
   if (checkoutModal) {
     checkoutModal.classList.remove("active");
@@ -2508,6 +2499,15 @@ const processCheckout = () => {
 
   // Redirección directa en lugar de window.open para eludir bloqueo de popups en iOS Safari
   window.location.href = whatsappUrl;
+
+  setTimeout(() => {
+    cart = [];
+    appliedCoupon = null;
+    saveCart();
+    updateCartUI();
+    localStorage.removeItem("wz_cart_last_activity");
+    localStorage.removeItem("wz_cart_reminder_sent");
+  }, 2000);
 };
 
 

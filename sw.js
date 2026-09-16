@@ -1,5 +1,5 @@
 // Service Worker para soporte Offline y carga ultrarrápida Cache-First
-const CACHE_NAME = 'wzstore-cache-v10';
+const CACHE_NAME = 'wzstore-cache-v11';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

@@ -84,7 +84,7 @@ const showToast = (message, type = "success") => {
   toast.className = `border px-4 py-3 rounded-xl shadow-2xl text-xs font-semibold flex items-center gap-2 transform transition-all duration-300 pointer-events-auto ${bgColor}`;
   toast.innerHTML = `
     <span class="w-2 h-2 rounded-full ${type === "success" ? "bg-emerald-400 animate-pulse" : "bg-red-400"}"></span>
-    <span>${message}</span>
+    <span>${sanitizeInput(message)}</span>
   `;
   container.appendChild(toast);
 
@@ -852,10 +852,10 @@ function renderInventoryTable() {
       return `
         <div class="flex flex-col w-full p-4 rounded-2xl bg-card border border-gray-800 hover:border-gray-700 transition-all shadow-lg space-y-3">
           <div class="flex items-start gap-3 w-full">
-            <img src="${safeImageUrl}" class="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-xl border border-gray-700 shrink-0" alt="${p.name}">
+            <img src="${safeImageUrl}" class="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-xl border border-gray-700 shrink-0" alt="${sanitizeInput(p.name)}">
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between gap-2">
-                <h3 class="font-bold text-white text-base truncate leading-tight">${p.name}</h3>
+                <h3 class="font-bold text-white text-base truncate leading-tight">${sanitizeInput(p.name)}</h3>
                 <span class="text-xs text-gray-500 font-mono shrink-0">#${displayId}</span>
               </div>
               <p class="text-xs text-gray-400 capitalize mt-0.5">${safeCategory} ${safeSubCategory ? '· ' + safeSubCategory : ''}</p>
@@ -956,6 +956,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Acción de Doble Confirmación para Eliminar
 window.confirmDelete = async function (id) {
+  const session = getCurrentSession();
+  if (!session || session.role !== "admin") {
+    showToast("Acceso denegado: Solo el Administrador puede eliminar prendas.", "error");
+    return;
+  }
+
   const btn = document.getElementById(`del-btn-${id}`);
   if (!btn) return;
   if (btn.innerText.includes("Eliminar")) {
@@ -972,7 +978,7 @@ window.confirmDelete = async function (id) {
     let products = loadProducts();
     products = products.filter((p) => String(p.id) !== String(id));
     // Mantener localStorage únicamente como respaldo offline
-    saveProducts(products);
+    await saveProducts(products);
     renderInventoryTable();
 
     // Sincronización directa con Supabase (eliminación)
@@ -1853,7 +1859,7 @@ form.addEventListener("submit", async (e) => {
   }
 
   // Guardar en localStorage únicamente como respaldo offline
-  saveProducts(products);
+  await saveProducts(products);
 
   // Limpiar estrictamente el estado y el formulario
   editingId = null;

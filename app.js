@@ -1474,9 +1474,9 @@ const renderCatalog = (catalogData = null) => {
       <div class="p-4 pb-4 flex flex-col flex-grow justify-between">
         <div>
           <div class="flex items-center justify-between gap-2 mb-1">
-            <h3 class="text-sm sm:text-base font-bold text-white truncate flex-1 min-w-0" title="${sanitizeInput(p.name)}">${p.name}</h3>
+            <h3 class="text-sm sm:text-base font-bold text-white truncate flex-1 min-w-0" title="${sanitizeInput(p.name)}">${sanitizeInput(p.name)}</h3>
           </div>
-          <p class="text-xs text-slate-400 line-clamp-2 mb-2">${p.description}</p>
+          <p class="text-xs text-slate-400 line-clamp-2 mb-2">${sanitizeInput(p.description)}</p>
           <div class="my-2">
             <div class="flex gap-1.5 flex-wrap">${sizesHtml}</div>
           </div>
@@ -1484,7 +1484,7 @@ const renderCatalog = (catalogData = null) => {
 
         <div class="mt-auto pt-3 border-t border-slate-800/80 flex items-center justify-between gap-3">
           <div class="flex-1 min-w-0">
-            <span class="text-[10px] text-slate-400 uppercase font-semibold block leading-none mb-1 sm:hidden truncate">${p.name}</span>
+            <span class="text-[10px] text-slate-400 uppercase font-semibold block leading-none mb-1 sm:hidden truncate">${sanitizeInput(p.name)}</span>
             <p data-product-price class="text-xs sm:text-sm font-black text-emerald-400 truncate">$${finalPrice.toLocaleString("es-CO")} COP</p>
           </div>
           ${
@@ -1585,7 +1585,7 @@ const openSizeBottomSheet = (productId, mode = 'add') => {
         if (isOutOfStock) {
           return `
             <button type="button" disabled class="flex-1 min-w-[70px] py-2.5 px-3 rounded-xl border border-slate-800 bg-slate-900/40 text-slate-600 line-through text-xs font-semibold cursor-not-allowed opacity-50 flex flex-col items-center justify-center">
-              <span class="text-xs font-bold leading-tight">${s.size}</span>
+              <span class="text-xs font-bold leading-tight">${sanitizeInput(s.size)}</span>
               <span class="text-[10px] leading-tight mt-0.5">0 disp.</span>
             </button>
           `;
@@ -1595,7 +1595,7 @@ const openSizeBottomSheet = (productId, mode = 'add') => {
           : "border-slate-700 bg-slate-800 hover:border-emerald-400 text-white";
         return `
           <button type="button" data-sheet-size-index="${idx}" class="flex-1 min-w-[70px] py-2.5 px-3 rounded-xl border ${borderBg} text-xs font-semibold transition-all active:scale-95 cursor-pointer flex flex-col items-center justify-center shadow-sm">
-            <span class="text-sm font-black leading-tight">${s.size}</span>
+            <span class="text-sm font-black leading-tight">${sanitizeInput(s.size)}</span>
             <span class="text-[10px] text-slate-400 leading-tight mt-0.5">${stock} disp.</span>
           </button>
         `;
@@ -2135,6 +2135,14 @@ const recoverCartFromUrl = () => {
 
       if (!authenticProduct || authenticProduct.status === "agotado" || authenticProduct.isAvailable === false) {
         return;
+      }
+
+      if (typeof authenticProduct.variants === "string") {
+        try {
+          authenticProduct.variants = JSON.parse(authenticProduct.variants);
+        } catch (_) {
+          authenticProduct.variants = [];
+        }
       }
 
       // Sanitización completa de datos alfanuméricos contra DOM-XSS

@@ -158,6 +158,9 @@
             </button>
             <input type="file" id="wz-restore-input" accept=".json" class="hidden" onchange="importCatalogBackup(event)" />
 
+            <!-- Botón Crear Trabajador -->
+            <button id="wz-open-worker-modal-btn" type="button" class="text-xs bg-slate-800 hover:bg-slate-700 text-sky-400 px-3 py-1.5 rounded-lg border border-sky-500/30 transition-colors font-medium cursor-pointer hidden flex items-center gap-1.5"><span>+</span> Crear Trabajador</button>
+
             <!-- Botón de Cambio de Contraseña -->
             <button
               id="wz-open-password-btn"
@@ -656,6 +659,31 @@
     <!-- Carga del script lógico -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="admin.js"></script>
+
+    <!-- MODAL DE REGISTRO DE TRABAJADOR -->
+    <div id="wz-worker-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm hidden p-4">
+      <div class="bg-card w-full max-w-sm rounded-2xl border border-gray-800 shadow-2xl p-5 sm:p-6 relative my-auto">
+        <div class="flex justify-between items-center mb-4 border-b border-gray-800 pb-3">
+          <h3 class="text-sm font-bold text-white uppercase tracking-wider">Registrar Nuevo Trabajador</h3>
+          <button id="wz-close-worker-btn" type="button" class="text-gray-400 hover:text-white text-2xl p-1 cursor-pointer">&times;</button>
+        </div>
+        <p class="text-[11px] text-gray-400 mb-4">El usuario tendrá permisos operativos para gestionar stock y catálogo, sin acceso a métricas ni eliminación.</p>
+        <form id="wz-worker-form" class="space-y-4" onsubmit="event.preventDefault();">
+          <div>
+            <label for="wz-worker-email" class="block text-xs font-semibold text-gray-400 mb-1">Correo del empleado *</label>
+            <input type="email" id="wz-worker-email" required placeholder="empleado@wzstore.com" class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2 text-white text-base sm:text-sm focus:border-neon outline-none" />
+          </div>
+          <div>
+            <label for="wz-worker-pwd" class="block text-xs font-semibold text-gray-400 mb-1">Contraseña temporal (mín. 8 caract.) *</label>
+            <input type="password" id="wz-worker-pwd" required minlength="8" placeholder="••••••••" class="w-full bg-dark border border-gray-700 rounded-xl px-3 py-2 text-white text-base sm:text-sm focus:border-neon outline-none" />
+          </div>
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" id="wz-cancel-worker-btn" class="px-4 py-2 text-xs font-semibold text-gray-400 hover:text-white bg-slate-800 rounded-xl transition-colors cursor-pointer">Cancelar</button>
+            <button type="submit" id="wz-submit-worker-btn" class="bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs transition-colors uppercase tracking-wider cursor-pointer">Registrar</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <!-- CONTENEDOR DE NOTIFICACIONES TOAST -->
 <div id="wz-toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>

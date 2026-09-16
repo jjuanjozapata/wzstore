@@ -159,6 +159,18 @@ const applyRolePermissions = () => {
     }
   }
 
+  // Visibilidad del botón para crear trabajadores según rol
+  const openWorkerBtn = document.getElementById("wz-open-worker-modal-btn");
+  if (openWorkerBtn) {
+    if (isMasterAdmin) {
+      openWorkerBtn.classList.remove("hidden");
+      openWorkerBtn.classList.add("flex");
+    } else {
+      openWorkerBtn.classList.add("hidden");
+      openWorkerBtn.classList.remove("flex");
+    }
+  }
+
   // Re-renderizar inventario para ajustar botones de eliminación según permisos
   renderInventoryTable();
 };
@@ -396,6 +408,78 @@ if (pwdForm) {
       closePasswordModal();
     } catch (err) {
       showToast(err.message || "Error al actualizar la contraseña.", "error");
+    }
+  });
+}
+
+// Controladores para Modal de Registro de Trabajador
+const workerModal = document.getElementById("wz-worker-modal");
+const openWorkerModalBtn = document.getElementById("wz-open-worker-modal-btn");
+const closeWorkerBtn = document.getElementById("wz-close-worker-btn");
+const cancelWorkerBtn = document.getElementById("wz-cancel-worker-btn");
+const workerForm = document.getElementById("wz-worker-form");
+
+const closeWorkerModal = () => {
+  if (workerModal) workerModal.classList.add("hidden");
+  if (workerForm) workerForm.reset();
+};
+
+if (openWorkerModalBtn) {
+  openWorkerModalBtn.addEventListener("click", () => {
+    if (workerModal) workerModal.classList.remove("hidden");
+  });
+}
+if (closeWorkerBtn) closeWorkerBtn.addEventListener("click", closeWorkerModal);
+if (cancelWorkerBtn) cancelWorkerBtn.addEventListener("click", closeWorkerModal);
+
+if (workerForm) {
+  workerForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const emailInput = document.getElementById("wz-worker-email");
+    const pwdInput = document.getElementById("wz-worker-pwd");
+    const submitBtn = document.getElementById("wz-submit-worker-btn") || workerForm.querySelector('button[type="submit"]');
+
+    const email = emailInput ? emailInput.value.trim() : "";
+    const password = pwdInput ? pwdInput.value.trim() : "";
+
+    if (password.length < 8) {
+      showToast("La contraseña debe tener al menos 8 caracteres.", "error");
+      return;
+    }
+
+    const originalBtnText = submitBtn ? submitBtn.textContent : "Registrar";
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Registrando...";
+    }
+
+    try {
+      const { data, error } = await wzClient.rpc('admin_create_worker', { worker_email: email, worker_password: password });
+
+      if (error) {
+        showToast(error.message, "error");
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalBtnText;
+        }
+        return;
+      }
+
+      showToast("Trabajador registrado exitosamente.");
+      closeWorkerModal();
+      workerForm.reset();
+      recordAuditEvent("Registro de nuevo trabajador: " + email);
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalBtnText;
+      }
+    } catch (err) {
+      showToast(err.message || "Error al registrar el trabajador.", "error");
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalBtnText;
+      }
     }
   });
 }

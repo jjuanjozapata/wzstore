@@ -38,14 +38,11 @@ const formatProductForSupabase = (prod) => {
 // Utilidad para decodificar entidades HTML preexistentes
 const decodeEntities = (str) => {
   if (typeof str !== 'string') return str;
-  if (typeof document !== 'undefined') {
-    const txt = document.createElement('textarea');
-    txt.innerHTML = str;
-    return txt.value;
-  }
   return str
     .replace(/&quot;/g, '"')
     .replace(/&#x27;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&amp;/g, '&');
@@ -827,6 +824,7 @@ function renderInventoryTable() {
       if (Array.isArray(p.variants) && p.variants.length > 0) {
         variantsHtml = `<div class="flex flex-wrap gap-1.5 pt-2 border-t border-gray-800/80 w-full">`;
         p.variants.forEach((v) => {
+          const safeColorHex = typeof v.colorHex === "string" && /^#[0-9A-Fa-f]{3,8}$/.test(v.colorHex) ? v.colorHex : '#10b981';
           if (Array.isArray(v.sizes)) {
             v.sizes.forEach((s) => {
               const stockNum = Number(s.stock) || 0;
@@ -835,7 +833,7 @@ function renderInventoryTable() {
               const safeSize = sanitizeInput(s.size);
               variantsHtml += `
                 <div class="inline-flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 px-2.5 py-1 rounded-xl text-xs text-slate-300">
-                  ${safeColor && safeColor !== 'Único' ? `<span class="w-2 h-2 rounded-full" style="background-color: ${v.colorHex || '#10b981'}"></span><span class="text-slate-400 font-medium">${safeColor}</span> · ` : ''}
+                  ${safeColor && safeColor !== 'Único' ? `<span class="w-2 h-2 rounded-full" style="background-color: ${safeColorHex}"></span><span class="text-slate-400 font-medium">${safeColor}</span> · ` : ''}
                   <span class="font-bold text-white">Talla ${safeSize}</span>
                   <span class="text-slate-600">:</span>
                   <span class="${stockColor} font-bold font-mono">${stockNum}</span>
@@ -976,26 +974,28 @@ window.confirmDelete = async function (id) {
       }
     }, 3000);
   } else {
+    // Sincronización directa con Supabase (eliminación) antes de alterar el arreglo local
+    if (wzClient) {
+      try {
+        const { error } = await wzClient.from('productos').delete().eq('id', id);
+        if (error) {
+          console.error("Error al eliminar producto en Supabase:", error);
+          if (typeof showToast === "function") showToast(error.message || "Error al eliminar producto.", "error");
+          return;
+        }
+      } catch (err) {
+        console.error("Fallo de conexión al eliminar en Supabase:", err);
+        if (typeof showToast === "function") showToast(err.message || "Fallo de conexión al eliminar en Supabase.", "error");
+        return;
+      }
+    }
+
     // Eliminar definitivamente
     let products = loadProducts();
     products = products.filter((p) => String(p.id) !== String(id));
     // Mantener localStorage únicamente como respaldo offline
     await saveProducts(products);
     renderInventoryTable();
-
-    // Sincronización directa con Supabase (eliminación)
-    if (wzClient) {
-      try {
-        const { error } = await wzClient.from('productos').delete().eq('id', id);
-        if (error) {
-          console.error("Error al eliminar producto en Supabase:", error);
-          if (typeof showToast === "function") showToast(error.message, "error");
-        }
-      } catch (err) {
-        console.error("Fallo de conexión al eliminar en Supabase:", err);
-        if (typeof showToast === "function") showToast(err.message, "error");
-      }
-    }
   }
 };
 
@@ -1133,6 +1133,9 @@ window.toggleProductStatus = async function(id) {
   const isCurrentlyActive = target.status !== "agotado" && target.isAvailable !== false && totalStock > 0;
 
   if (isCurrentlyActive) {
+    // Clon de seguridad del estado previo para revertir en caso de fallo
+    const previousTarget = JSON.parse(JSON.stringify(target));
+
     // Desactivar inmediatamente pasando existencias lógicas a cero
     target.status = "agotado";
     target.isAvailable = false;
@@ -1143,20 +1146,28 @@ window.toggleProductStatus = async function(id) {
       });
     });
     // Guardar en localStorage como respaldo offline
-    saveProducts(products);
+    await saveProducts(products);
     renderInventoryTable();
 
-    // Sincronización directa con Supabase
+    // Sincronización directa con Supabase con captura de errores y reversión local
     if (wzClient) {
       try {
         const { error } = await wzClient.from('productos').upsert(formatProductForSupabase(target));
         if (error) {
           console.error("Error al actualizar disponibilidad en Supabase:", error);
-          if (typeof showToast === "function") showToast(error.message, "error");
+          if (typeof showToast === "function") showToast(error.message || "Error al actualizar en Supabase.", "error");
+          products[index] = previousTarget;
+          await saveProducts(products);
+          renderInventoryTable();
+          return;
         }
       } catch (err) {
         console.error("Fallo de conexión al actualizar en Supabase:", err);
-        if (typeof showToast === "function") showToast(err.message, "error");
+        if (typeof showToast === "function") showToast(err.message || "Fallo de conexión al actualizar en Supabase.", "error");
+        products[index] = previousTarget;
+        await saveProducts(products);
+        renderInventoryTable();
+        return;
       }
     }
 
@@ -2010,6 +2021,12 @@ const isValidAlphanumericString = (val, allowSpaces = false) => {
 };
 
 window.importCatalogBackup = (event) => {
+  if (getCurrentSession()?.role !== 'admin') {
+    showToast('Acceso denegado', 'error');
+    if (event?.target) event.target.value = "";
+    return;
+  }
+
   const file = event.target.files[0];
   if (!file) return;
 

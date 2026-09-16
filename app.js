@@ -7,15 +7,7 @@ const wzClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SU
 // Sanitizador contra Vector XSS por codificación de entidades completas
 const sanitizeInput = (str) => {
   if (typeof str !== 'string') return str;
-  return str.replace(/[<>"']/g, (char) => {
-    switch (char) {
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '"': return '&quot;';
-      case "'": return '&#x27;';
-      default: return char;
-    }
-  }).trim();
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;').trim();
 };
 
 const decodeHtml = (str) => typeof str !== 'string' ? '' : str.replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
@@ -495,7 +487,7 @@ window.renderFilteredCatalog = (customList) => renderCatalog(customList);
 // Variables de Envío y Cupones
 let appliedCoupon = null; // 'WZ2026' | 'FREEATHLETE'
 let shippingType = "local"; // 'local' | 'nacional'
-const SHIP_RATES = { local: 5000, nacional: 20000 };
+const SHIP_RATES = { local: 10000, nacional: 30000 };
 
 // 1. Fallback visual universal en onerror para etiquetas <img> sin SVG roto
 window.handleImageError = (imgEl) => {
@@ -1410,7 +1402,8 @@ const renderCatalog = (catalogData = null) => {
             .map((v, cIdx) => {
               const isSelected = (state?.colorIdx || 0) === cIdx;
               const ringClass = isSelected ? " ring-2 ring-emerald-400" : "";
-              return `<button type="button" class="color-pill w-4 h-4 rounded-full border border-slate-600 transition-transform${ringClass}" style="background-color: ${v.colorHex || '#10b981'}" data-action="select-color" data-product-id="${p.id}" data-color-index="${cIdx}" title="${sanitizeInput(v.color || '')}"></button>`;
+              const colorHex = (typeof v.colorHex === "string" && /^#[0-9A-Fa-f]{3,8}$/.test(v.colorHex)) ? v.colorHex : '#10b981';
+              return `<button type="button" class="color-pill w-4 h-4 rounded-full border border-slate-600 transition-transform${ringClass}" style="background-color: ${colorHex}" data-action="select-color" data-product-id="${p.id}" data-color-index="${cIdx}" title="${sanitizeInput(v.color || '')}"></button>`;
             })
             .join("")}</div>`
         : "";
@@ -1704,18 +1697,32 @@ const executeBuyNow = (productId) => {
 
   const finalPrice = p.isOffer ? p.priceOffer : p.priceRegular;
 
-  // Limpia el carrito y añade esa única prenda para checkout inmediato
-  cart = [{
-    id: p.id,
-    name: p.name,
-    color: variant.color || "",
-    size: sizeObj.size,
-    price: finalPrice,
-    priceRegular: p.priceRegular,
-    qty: 1,
-    maxStock: sizeObj.stock,
-    img: p.imageUrl || (p.media?.images && p.media.images[0]) || "",
-  }];
+  const existing = cart.find(
+    (i) =>
+      String(i.id) === String(p.id) &&
+      i.color === (variant.color || "") &&
+      i.size === sizeObj.size
+  );
+
+  if (existing) {
+    if (existing.qty < sizeObj.stock) {
+      existing.qty++;
+    } else if (typeof showNotificationModal === "function") {
+      showNotificationModal("Límite de Stock", "Has alcanzado el límite máximo de existencias para esta talla.");
+    }
+  } else {
+    cart.push({
+      id: p.id,
+      name: p.name,
+      color: variant.color || "",
+      size: sizeObj.size,
+      price: finalPrice,
+      priceRegular: p.priceRegular,
+      qty: 1,
+      maxStock: sizeObj.stock,
+      img: p.imageUrl || (p.media?.images && p.media.images[0]) || "",
+    });
+  }
 
   saveCart();
   updateCartUI();
@@ -2040,7 +2047,7 @@ const updateCartUI = () => {
   }
 
   const FREE_SHIPPING_THRESHOLD = 300000;
-  let shippingCost = SHIP_RATES[shippingType] || 5000;
+  let shippingCost = SHIP_RATES[shippingType] || SHIP_RATES.local;
   const isFreeByThreshold = subtotal >= FREE_SHIPPING_THRESHOLD;
 
   if (isFreeByThreshold || appliedCoupon === "FREEATHLETE") {
@@ -2428,7 +2435,7 @@ const processCheckout = () => {
   }
 
   // Reglas de flete gratuito automático sobre $300.000 COP o con cupón FREEATHLETE
-  let verifiedBaseShipping = SHIP_RATES[shippingType] || 5000;
+  let verifiedBaseShipping = SHIP_RATES[shippingType] || SHIP_RATES.local;
   if (verifiedSubtotal >= 300000 || appliedCoupon === "FREEATHLETE") {
     verifiedBaseShipping = 0;
   }
@@ -2475,22 +2482,28 @@ const processCheckout = () => {
 
   const whatsappUrl = `https://wa.me/573006724082?text=${encodeURIComponent(msg)}`;
 
-  // Redirección directa en lugar de window.open para eludir bloqueo de popups en iOS Safari
-  window.location.href = whatsappUrl;
-
-  // Vaciar carrito y cerrar modal tras despachar la orden
-  cart = [];
-  appliedCoupon = null;
-  saveCart();
-  updateCartUI();
-  localStorage.removeItem("wz_cart_last_activity");
-  localStorage.removeItem("wz_cart_reminder_sent");
+  // Envolver el vaciado de carrito y almacenamiento en pagehide para no borrar antes de navegar
+  window.addEventListener(
+    "pagehide",
+    () => {
+      cart = [];
+      appliedCoupon = null;
+      saveCart();
+      updateCartUI();
+      localStorage.removeItem("wz_cart_last_activity");
+      localStorage.removeItem("wz_cart_reminder_sent");
+    },
+    { once: true }
+  );
 
   const checkoutModal = document.getElementById("modal-checkout");
   if (checkoutModal) {
     checkoutModal.classList.remove("active");
   }
   stopCheckoutTimer();
+
+  // Redirección directa en lugar de window.open para eludir bloqueo de popups en iOS Safari
+  window.location.href = whatsappUrl;
 };
 
 

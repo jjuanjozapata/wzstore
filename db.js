@@ -14,7 +14,6 @@ const INITIAL_DATABASE = [
     isFeatured: true,
     imageUrl: "https://images.unsplash.com/photo-1581636625402-29f2a01222ce?auto=format&fit=crop&w=600&q=80",
     badge: "TOP VENTAS",
-    pointsAwarded: 80,
     variants: [
       {
         color: "Negro Obsidiana",
@@ -41,7 +40,6 @@ const INITIAL_DATABASE = [
     isAvailable: true,
     imageUrl: "https://images.unsplash.com/photo-1506629082955-511b1aa562c8?auto=format&fit=crop&w=600&q=80",
     badge: "NUEVO",
-    pointsAwarded: 60,
     variants: [
       {
         color: "Gris Asfalto",
@@ -67,7 +65,6 @@ const INITIAL_DATABASE = [
     isAvailable: true,
     imageUrl: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=600&q=80",
     badge: "HOT OFFER",
-    pointsAwarded: 200,
     variants: [
       {
         color: "Rojo Carmesí",
@@ -93,7 +90,6 @@ const INITIAL_DATABASE = [
     isAvailable: true,
     imageUrl: "https://images.unsplash.com/photo-1556821840-3a63f95609a7?auto=format&fit=crop&w=600&q=80",
     badge: "STOCK LIMITADO",
-    pointsAwarded: 95,
     variants: [
       {
         color: "Blanco Titanio",
@@ -118,7 +114,6 @@ const INITIAL_DATABASE = [
     isAvailable: true,
     imageUrl: "https://images.unsplash.com/photo-1579724941910-3843f5f3e944?auto=format&fit=crop&w=600&q=80",
     badge: "",
-    pointsAwarded: 25,
     variants: [
       {
         color: "Negro",
@@ -143,7 +138,6 @@ const INITIAL_DATABASE = [
     isAvailable: true,
     imageUrl: "https://images.unsplash.com/photo-1510414696678-2415ad8474aa?auto=format&fit=crop&w=600&q=80",
     badge: "HOT OFFER",
-    pointsAwarded: 40,
     variants: [
       {
         color: "Verde Militar",
@@ -169,7 +163,6 @@ const INITIAL_DATABASE = [
     isAvailable: true,
     imageUrl: "https://images.unsplash.com/photo-1571945153237-4929e783af4a?auto=format&fit=crop&w=600&q=80",
     badge: "TOP VENTAS",
-    pointsAwarded: 35,
     variants: [
       {
         color: "Rosa Neón",
@@ -195,7 +188,6 @@ const INITIAL_DATABASE = [
     isAvailable: true,
     imageUrl: "https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=600&q=80",
     badge: "NUEVO",
-    pointsAwarded: 110,
     variants: [
       {
         color: "Camuflaje Urbano",

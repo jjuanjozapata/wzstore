@@ -57,7 +57,9 @@ body {
   position: fixed; inset: 0; z-index: 110; display: none;
   height: 100vh; height: 100dvh; max-height: 100dvh; padding-bottom: env(safe-area-inset-bottom);
   background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);
-  align-items: center; justify-content: center;
+  align-items: flex-start; justify-content: center;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .modal-checkout.active { display: flex; }
 
@@ -93,6 +95,12 @@ body {
 [data-action="buy-now"] {
   position: relative;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-flash-buy,
+#wz-sticky-cta {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .btn-flash-buy:hover,

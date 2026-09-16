@@ -1,13 +1,11 @@
 // Service Worker para soporte Offline y carga ultrarrápida Cache-First
-const CACHE_NAME = 'wzstore-cache-v9';
+const CACHE_NAME = 'wzstore-cache-v10';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
-  './admin.html',
   './politicas.html',
   './styles.css',
   './app.js',
-  './admin.js',
   './db.js',
   './favicon.svg',
   'https://cdn.tailwindcss.com',
@@ -48,6 +46,12 @@ self.addEventListener('fetch', (event) => {
   if (url.hostname.endsWith('supabase.co')) return;
   if (event.request.method !== 'GET') return;
 
+  // Solicitudes hacia rutas que contengan '/admin': Network-Only sin intervención de caché
+  if (url.pathname.includes('/admin')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   // Solicitudes de navegación: Network-First con fallback offline
   if (event.request.mode === 'navigate') {
     event.respondWith(
@@ -69,7 +73,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   const isLocalAsset = url.origin === self.location.origin &&
-    ['/app.js', '/styles.css', '/db.js', '/admin.js'].some(path => url.pathname.endsWith(path));
+    ['/app.js', '/styles.css', '/db.js'].some(path => url.pathname.endsWith(path));
 
   // Recursos locales críticos: Network-First con fallback a caché
   if (isLocalAsset) {
@@ -87,6 +91,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Recursos multimedia externos (imágenes y videos): Network-Only para evitar QuotaExceededError en navegadores WebKit
+  const isExternalMedia = url.origin !== self.location.origin && (
+    event.request.destination === 'image' ||
+    event.request.destination === 'video' ||
+    /\.(jpe?g|png|gif|webp|svg|avif|ico|bmp|mp4|webm|ogg|mov|m4v)(\?.*)?$/i.test(url.pathname)
+  );
+
+  if (isExternalMedia) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   // Estrategia Cache-First para el resto de recursos
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
@@ -98,10 +114,21 @@ self.addEventListener('fetch', (event) => {
         if (!networkResponse || networkResponse.status !== 200 || (networkResponse.type !== 'basic' && networkResponse.type !== 'cors')) {
           return networkResponse;
         }
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
+
+        // Excluir recursos multimedia externos del almacenamiento dinámico en caché para evitar QuotaExceededError en navegadores WebKit
+        const contentType = networkResponse.headers.get('content-type') || '';
+        const isExternalMediaResponse = url.origin !== self.location.origin && (
+          contentType.startsWith('image/') ||
+          contentType.startsWith('video/')
+        );
+
+        if (!isExternalMediaResponse) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseToCache).catch(() => {});
+          });
+        }
+
         return networkResponse;
       });
     })

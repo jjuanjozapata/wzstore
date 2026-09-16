@@ -19,7 +19,7 @@
     <!-- Content Security Policy (CSP) Endurecido Enterprise -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://images.unsplash.com https://jjuanjozapata.github.io https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co; media-src 'self' data: blob: https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co; connect-src 'self' https://wa.me https://api.whatsapp.com https://web.whatsapp.com https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co wss://bthyaqpmvtyncnsbrouv.supabase.co wss://*.supabase.co; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://wa.me https://api.whatsapp.com;"
+      content="default-src 'self'; script-src 'self' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://images.unsplash.com https://jjuanjozapata.github.io https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co; media-src 'self' data: blob: https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co; connect-src 'self' https://wa.me https://api.whatsapp.com https://web.whatsapp.com https://bthyaqpmvtyncnsbrouv.supabase.co https://*.supabase.co wss://bthyaqpmvtyncnsbrouv.supabase.co wss://*.supabase.co; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self' https://wa.me https://api.whatsapp.com;"
     />
     <!-- Título estricto para snippet de Google SERP sin sufijos adicionales -->
     <title>WZSTORE</title>
@@ -175,7 +175,7 @@
 
         const script = document.createElement('script');
         script.type = 'application/ld+json';
-        script.text = JSON.stringify(schemaData);
+        script.text = JSON.stringify(schemaData).replace(/<\/script>/g, '<\\/script>');
         document.head.appendChild(script);
       });
     </script>
@@ -649,8 +649,8 @@
             id="shipping-select"
             class="w-full bg-[#1e293b] text-white px-3 py-2 rounded text-base sm:text-sm outline-none cursor-pointer"
           >
-            <option value="local">Envío Local (+$5,000)</option>
-            <option value="nacional">Envío Nacional (+$20,000)</option>
+            <option value="local">Envío Local (+$10.000 COP)</option>
+            <option value="nacional">Envío Nacional (+$30.000 COP)</option>
           </select>
         </div>
 
@@ -823,8 +823,8 @@
           <div>
             <label for="chk-shipping-type" class="text-xs text-slate-400 font-semibold block mb-1">Zona de Entrega *</label>
             <select id="chk-shipping-type" class="w-full bg-[#1e293b] px-3 py-2 rounded text-white text-base sm:text-sm outline-none focus:border-emerald-500 border border-slate-700 cursor-pointer">
-              <option value="local">Envío Local (+$5.000 COP)</option>
-              <option value="nacional">Envío Nacional (+$20.000 COP)</option>
+              <option value="local">Envío Local (+$10.000 COP)</option>
+              <option value="nacional">Envío Nacional (+$30.000 COP)</option>
             </select>
           </div>
 

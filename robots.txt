@@ -1,5 +1,7 @@
 # Permitir rastreo universal a todos los motores de búsqueda
 User-agent: *
+Disallow: /admin.html
+Disallow: /admin.js
 Allow: /
 
 # Directivas explícitas para Googlebot permitiendo acceso a páginas y recursos del repositorio

@@ -544,7 +544,6 @@ window.showStoreModal = (mensaje, titulo = "WZSTORE") => {
           type="button"
           id="wz-store-modal-close"
           data-action="close-store-modal"
-          onclick="window.closeStoreModal()"
           class="absolute top-4 right-4 text-slate-400 hover:text-white text-xl font-bold w-8 h-8 rounded-full hover:bg-slate-800 flex items-center justify-center transition-colors"
           aria-label="Cerrar modal"
         >&times;</button>
@@ -554,7 +553,6 @@ window.showStoreModal = (mensaje, titulo = "WZSTORE") => {
         <button
           type="button"
           data-action="close-store-modal"
-          onclick="window.closeStoreModal()"
           class="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
         >Entendido</button>
       </div>
@@ -1408,7 +1406,7 @@ const renderCatalog = (catalogData = null) => {
               const isSelected = (state?.colorIdx || 0) === cIdx;
               const ringClass = isSelected ? " ring-2 ring-emerald-400" : "";
               const colorHex = (typeof v.colorHex === "string" && /^#[0-9A-Fa-f]{3,8}$/.test(v.colorHex)) ? v.colorHex : '#10b981';
-              return `<button type="button" class="color-pill w-4 h-4 rounded-full border border-slate-600 transition-transform${ringClass}" style="background-color: ${colorHex}" data-action="select-color" data-product-id="${p.id}" data-color-index="${cIdx}" title="${sanitizeInput(v.color || '')}"></button>`;
+              return `<button type="button" class="color-pill w-4 h-4 rounded-full border border-slate-600 transition-transform${ringClass}" style="background-color: ${colorHex}" data-action="select-color" data-product-id="${sanitizeInput(String(p.id))}" data-color-index="${cIdx}" title="${sanitizeInput(v.color || '')}"></button>`;
             })
             .join("")}</div>`
         : "";
@@ -1430,7 +1428,7 @@ const renderCatalog = (catalogData = null) => {
           else
             classes +=
               "border-slate-700 text-slate-300 hover:border-slate-400 ";
-          return `<button ${isDisabled ? "disabled" : ""} data-action="select-size" data-product-id="${p.id}" data-size-index="${idx}" class="${classes}">${sanitizeInput(s.size)}${lowStockBadge}</button>`;
+          return `<button ${isDisabled ? "disabled" : ""} data-action="select-size" data-product-id="${sanitizeInput(String(p.id))}" data-size-index="${idx}" class="${classes}">${sanitizeInput(s.size)}${lowStockBadge}</button>`;
         })
         .join("");
 
@@ -1493,7 +1491,7 @@ const renderCatalog = (catalogData = null) => {
       }
       <div 
         class="product-media-container relative h-64 bg-slate-950 overflow-hidden ${hasMultiplePhotos ? 'cursor-pointer' : ''}" 
-        data-product-id="${p.id}"
+        data-product-id="${sanitizeInput(String(p.id))}"
         data-front-src="${sanitizeMediaUrl(frontImg)}"
         ${hasMultiplePhotos ? `data-back-src="${sanitizeMediaUrl(backImg)}"` : ''}
       >
@@ -1535,8 +1533,8 @@ const renderCatalog = (catalogData = null) => {
             !isAgotado
               ? `
             <div class="flex items-center gap-1.5 shrink-0">
-              <button data-action="buy-now" data-product-id="${p.id}" class="btn-flash-buy bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-xs px-2.5 py-2 rounded-lg font-bold uppercase transition-all active:scale-95" title="Comprar ahora">Comprar Ya</button>
-              <button data-action="add-to-cart" data-product-id="${p.id}" class="shrink-0 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-black text-xs px-3.5 py-2.5 rounded-lg transition-all shadow-md shadow-emerald-500/20 uppercase tracking-wider flex items-center gap-1.5" aria-label="Añadir al Carro">
+              <button data-action="buy-now" data-product-id="${sanitizeInput(String(p.id))}" class="btn-flash-buy bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 text-xs px-2.5 py-2 rounded-lg font-bold uppercase transition-all active:scale-95" title="Comprar ahora">Comprar Ya</button>
+              <button data-action="add-to-cart" data-product-id="${sanitizeInput(String(p.id))}" class="shrink-0 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-black text-xs px-3.5 py-2.5 rounded-lg transition-all shadow-md shadow-emerald-500/20 uppercase tracking-wider flex items-center gap-1.5" aria-label="Añadir al Carro">
                 <svg class="w-4 h-4 fill-current" viewBox="0 0 20 20">
                   <path d="M3 1a1 1 0 000 2h1.22l.305 1.222a.997.997 0 00.01.042l1.358 5.43-.893.892C3.74 11.846 4.632 14 6.414 14H15a1 1 0 000-2H6.414l1-1H14a1 1 0 00.894-.553l3-6A1 1 0 0017 3H6.28l-.31-1.243A1 1 0 005 1H3zM16 16.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM6.5 18a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
                 </svg>
@@ -1549,7 +1547,7 @@ const renderCatalog = (catalogData = null) => {
           `
           }
         </div>
-        <button type="button" data-action="ask-product" data-product-id="${p.id}" class="text-[10px] text-slate-400 hover:text-emerald-400 transition-colors mt-2 text-center block w-full">¿Dudas con la talla? Pregúntanos por WhatsApp</button>
+        <button type="button" data-action="ask-product" data-product-id="${sanitizeInput(String(p.id))}" class="text-[10px] text-slate-400 hover:text-emerald-400 transition-colors mt-2 text-center block w-full">¿Dudas con la talla? Pregúntanos por WhatsApp</button>
       </div>
     </div>
   `;
@@ -2456,40 +2454,40 @@ const processCheckout = () => {
   const mathematicallyVerifiedTotal = verifiedSubtotal - calculatedDiscount + verifiedFinalShipping;
 
   // Maquetación del mensaje para despacho por WhatsApp
-  let msg = `🔥 *PEDIDO #${orderId} - WZSTORE* 🔥\n\n`;
-  msg += `👤 *Cliente:* ${decodeHtml(firstName)} ${decodeHtml(lastName)}\n`;
-  msg += `📞 *Teléfono:* ${phone}\n`;
-  msg += `📍 *Dirección:* ${decodeHtml(addr)}${extraAddr ? ` (${decodeHtml(extraAddr)})` : ""}\n`;
-  msg += `🏙️ *Ubicación:* ${city ? decodeHtml(city) : "C.P. " + postal}${postal && city ? ` (C.P. ${postal})` : ""}\n`;
-  msg += `💳 *Método de Pago:* ${paymentMethod}\n`;
-  msg += `🚚 *Modalidad de Envío:* ${shippingType === "local" ? "Local" : "Nacional"}\n`;
+  let msg = `\u{1F525} *PEDIDO #${orderId} - WZSTORE* \u{1F525}\n\n`;
+  msg += `\u{1F464} *Cliente:* ${decodeHtml(firstName)} ${decodeHtml(lastName)}\n`;
+  msg += `\u{1F4DE} *Teléfono:* ${phone}\n`;
+  msg += `\u{1F4CD} *Dirección:* ${decodeHtml(addr)}${extraAddr ? ` (${decodeHtml(extraAddr)})` : ""}\n`;
+  msg += `\u{1F3D9} *Ubicación:* ${city ? decodeHtml(city) : "C.P. " + postal}${postal && city ? ` (C.P. ${postal})` : ""}\n`;
+  msg += `\u{1F4B3} *Método de Pago:* ${paymentMethod}\n`;
+  msg += `\u{1F69A} *Modalidad de Envío:* ${shippingType === "local" ? "Local" : "Nacional"}\n`;
   if (isCod) {
     if (verifiedBaseShipping === 0) {
-      msg += `📦 *Flete / Envío:* $${verifiedFinalShipping.toLocaleString("es-CO")} COP (Flete base $0 GRATIS + $22.000 COP de recargo operativo por Pago Contra Entrega)\n\n`;
+      msg += `\u{1F4E6} *Flete / Envío:* $${verifiedFinalShipping.toLocaleString("es-CO")} COP (Flete base $0 GRATIS + $22.000 COP de recargo operativo por Pago Contra Entrega)\n\n`;
     } else {
-      msg += `📦 *Flete / Envío:* $${verifiedFinalShipping.toLocaleString("es-CO")} COP (Flete base $${verifiedBaseShipping.toLocaleString("es-CO")} COP + $22.000 COP de recargo operativo por Pago Contra Entrega)\n\n`;
+      msg += `\u{1F4E6} *Flete / Envío:* $${verifiedFinalShipping.toLocaleString("es-CO")} COP (Flete base $${verifiedBaseShipping.toLocaleString("es-CO")} COP + $22.000 COP de recargo operativo por Pago Contra Entrega)\n\n`;
     }
   } else {
-    msg += `📦 *Flete / Envío:* ${verifiedFinalShipping === 0 ? "¡GRATIS!" : `$${verifiedFinalShipping.toLocaleString("es-CO")} COP`}\n\n`;
+    msg += `\u{1F4E6} *Flete / Envío:* ${verifiedFinalShipping === 0 ? "¡GRATIS!" : `$${verifiedFinalShipping.toLocaleString("es-CO")} COP`}\n\n`;
   }
   msg += `*Prendas Solicitadas:*\n`;
 
   verifiedCartDetails.forEach((item) => {
     const itemQty = Math.max(1, Math.floor(Number(item.qty) || 1));
-    msg += `▪ ${decodeHtml(item.name)}\n   Color: ${decodeHtml(item.color)} | Talla: ${decodeHtml(item.size)} | Cant: ${itemQty} | Sub: $${item.subtotal.toLocaleString("es-CO")}\n`;
+    msg += `\u2022 ${decodeHtml(item.name)}\n   Color: ${decodeHtml(item.color)} | Talla: ${decodeHtml(item.size)} | Cant: ${itemQty} | Sub: $${item.subtotal.toLocaleString("es-CO")}\n`;
   });
 
   // Cálculo del ahorro total del cliente y aplicación de la línea psicológica obligatoria
   const verifiedSavings = (totalRegularCanon - verifiedSubtotal) + calculatedDiscount;
-  msg += `\n💰 *Total Liquidado: $${mathematicallyVerifiedTotal.toLocaleString("es-CO")} COP*\n`;
+  msg += `\n\u{1F4B0} *Total Liquidado: $${mathematicallyVerifiedTotal.toLocaleString("es-CO")} COP*\n`;
   if (verifiedSavings > 0) {
-    msg += `🏷️ ¡Ahorro total en WZSTORE por promociones: $${verifiedSavings.toLocaleString("es-CO")} COP!\n`;
+    msg += `\u{1F3F7} ¡Ahorro total en WZSTORE por promociones: $${verifiedSavings.toLocaleString("es-CO")} COP!\n`;
   }
   if (appliedCoupon) {
-    msg += `🎟️ *Cupón Redimido:* ${appliedCoupon}\n`;
+    msg += `\u{1F39F} *Cupón Redimido:* ${appliedCoupon}\n`;
   }
 
-  const whatsappUrl = `https://wa.me/573006724082?text=${encodeURIComponent(msg)}`;
+  const whatsappUrl = `https://api.whatsapp.com/send?phone=573006724082&text=${encodeURIComponent(msg.normalize('NFC'))}`;
 
   const checkoutModal = document.getElementById("modal-checkout");
   if (checkoutModal) {
@@ -2682,7 +2680,7 @@ const WZ_SUPPORT_CONFIG = {
 window.openSupportChat = (customContext = "") => {
   const timeHour = new Date().toLocaleTimeString("es-CO", { hour: '2-digit', minute: '2-digit' });
   const msgText = `Hola ${WZ_SUPPORT_CONFIG.agentName}, solicito asesoría personalizada en línea (${timeHour}). ${customContext ? `Motivo: ${customContext}` : '¿Podrían orientarme con un producto?'}`.trim();
-  const supportUrl = `https://wa.me/${WZ_SUPPORT_CONFIG.phone}?text=${encodeURIComponent(msgText)}`;
+  const supportUrl = 'https://api.whatsapp.com/send?phone=' + WZ_SUPPORT_CONFIG.phone + '&text=' + encodeURIComponent(msgText.normalize('NFC'));
   window.location.href = supportUrl;
 };
 
